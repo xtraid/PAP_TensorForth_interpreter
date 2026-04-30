@@ -9,12 +9,12 @@ else
 	CFLAGS = -O3 -std=C17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes #most annoying warning possible so i can make it right 
 endif
 
-all:TensorFort
+all:TensorForth
 
 %.o: %.c ${HEADERS}
 	${CC} ${CFLAGS} -c $<
 
-TensorFort: ${OBJ}
+TensorForth: ${OBJ}
 	${CC} ${CFLAGS} -o $@ $^
 	
 .PHONY: all clean

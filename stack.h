@@ -1,7 +1,11 @@
-#ifndef _STACK_DS
-#define _STACK_DS
+#ifndef STACK_DS
+#define STACK_DS
 
 #include <stdint.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define MAX_DIM 2
 
@@ -19,13 +23,14 @@ struct array_instance {
 };
 
 typedef struct {
-	array_instance **data;
+	array_instance **stack;
 	int32_t top;
 	int32_t capacity;
 } stack;
 
-stack* stack_init ();
-int stack_push(stack *s,float *data);
+stack* stack_init (); // implemented
+void stack_resize(stack *s);
+void stack_push(stack *s,float *arr, coppia shape);
 array_instance * stack_pop(stack *s);
 void stack_free(stack *s);
 array_instance * new_instance (float *data, coppia shape);
