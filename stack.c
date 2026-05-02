@@ -1,7 +1,7 @@
 #include "stack.h"
  /* Initializes a stack with an initial capacity of 1.
   * Returns NULL and prints an error if any allocation fails. */
-stack* stack_init(){
+stack* stack_init(void){
 	stack *s = malloc(sizeof(stack));
 	if (s == NULL){
 		perror("malloc");
@@ -9,7 +9,7 @@ stack* stack_init(){
 	}
 	s->top = 0;
 	s->capacity = 1;
-	s->stack = malloc(s->capacity*sizeof(array_instance*));
+	s->stack = malloc((size_t)s->capacity*sizeof(array_instance*));
 	if (s->stack == NULL){
 		perror("malloc");
 		free(s);
@@ -28,12 +28,12 @@ void stack_resize(stack *s){
 		new_capacity = s->capacity / 2;
 	else 
 		return;
-	array_instance **new_data = malloc(new_capacity * sizeof(array_instance*));
+	array_instance **new_data = malloc((size_t)new_capacity * sizeof(array_instance*));
 	if (new_data == NULL){
 		perror("malloc");
 		return;
 	}
-	memcpy(new_data, s->stack, s->top*sizeof(array_instance*));
+	memcpy(new_data, s->stack, (size_t)s->top*sizeof(array_instance*));
 	free(s->stack);
 	s->stack = new_data;
 	s->capacity = new_capacity;
@@ -66,6 +66,14 @@ void stack_push(stack *s, float *arr, coppia forma) {
     s->stack[s->top++] = instance;
   }
   
+/* Pushes an existing array_instance onto the stack, incrementing its ref_count. */
+void stack_push_instance(stack *s, array_instance *inst) {
+    if (s->capacity == s->top)
+        stack_resize(s);
+    inst->ref_count++;
+    s->stack[s->top++] = inst;
+}
+
 /* Pops and returns the top element of the stack.
    * Shrinks the stack if less than half capacity is used.
    * Caller is responsible for calling release_instance when done. */
@@ -75,6 +83,7 @@ array_instance *stack_pop(stack *s){
 		return NULL;
 		}
     array_instance *last = s->stack[--s->top];
+    last->ref_count--;
     if (s->top < s->capacity / 2)
         stack_resize(s);
     return last;
@@ -85,21 +94,20 @@ array_instance *stack_pop(stack *s){
 /* Decrements ref_count and frees the instance if no references remain. */
 void instance_free (array_instance *i){
 	if (i == NULL) return;
-	if (--i->ref_count ==  0){
+	if (i->ref_count <= 0){
 		free(i->data);
-		free(i);		
-	}	
+		free(i);
+	}
 }
 
 /* Frees all instances on the stack, then frees the stack itself.
    * Respects ref_count: instances shared via dup/over are freed only when all references are gone. */
 void stack_free(stack *s){
-	for (int i = 0; i < s->top; i++){
-		instance_free(s->stack[i]);
+	while (s->top > 0){
+		array_instance *inst = stack_pop(s);
+		instance_free(inst);
 	}
 	free(s->stack);
 	free(s);
-	
-	
 }
 

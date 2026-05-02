@@ -28,11 +28,12 @@ typedef struct {
 	int32_t capacity;
 } stack;
 
-stack* stack_init (); // implemented
+stack* stack_init (void); // implemented
 void stack_resize(stack *s);
 void stack_push(stack *s,float *arr, coppia shape);
-array_instance * stack_pop(stack *s);
+void stack_push_instance(stack *s, array_instance *inst);
+array_instance *stack_pop(stack *s);
 void stack_free(stack *s);
-array_instance * new_instance (float *data, coppia shape);
+array_instance *new_instance (float *data, coppia shape);
 void instance_free (array_instance *i);
 #endif 
