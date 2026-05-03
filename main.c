@@ -17,6 +17,6 @@ int main (int argc, char *argv[]){
 	
 	stack *my_stack = stack_init();
 	int err = parser(script, my_stack);
-	return 0;
+	return err;
 	
 }

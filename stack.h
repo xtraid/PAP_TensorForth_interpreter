@@ -16,6 +16,7 @@ typedef struct {
 	int32_t col;
 } coppia;
 
+	
 struct array_instance {
 	float *data;
 	coppia shape;
@@ -29,9 +30,9 @@ typedef struct {
 } stack;
 
 stack* stack_init (void); // implemented
-void stack_resize(stack *s);
-void stack_push(stack *s,float *arr, coppia shape);
-void stack_push_instance(stack *s, array_instance *inst);
+int stack_resize(stack *s);
+int stack_push(stack *s,float *arr, coppia shape);
+int stack_push_instance(stack *s, array_instance *inst);
 array_instance *stack_pop(stack *s);
 void stack_free(stack *s);
 array_instance *new_instance (float *data, coppia shape);

@@ -15,6 +15,9 @@ typedef enum {
 	OP_PRINT_N_POP,
 	OP_PRINT_MATRIX,
 	OP_DUPLICATE,
+	OP_ADD,
+	OP_SUBTRACTION,
+	OP_PRODUCT,
 
 	OP_UNKNOWN
 }OpCode;
@@ -34,6 +37,9 @@ int pop_print(stack *my_stack);
 
 int pop_print_as_matrix(stack *my_stack);
 
-void duplicate (stack *my_stack);
+int duplicate (stack *my_stack);
+
+int algebra (stack *my_stack, char op);
+
 
 #endif

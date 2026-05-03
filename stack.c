@@ -19,24 +19,25 @@ stack* stack_init(void){
 }
 
   /* Resizes the stack: doubles capacity when full, halves it when less than
-   * half is used. Returns silently on allocation failure. */
-void stack_resize(stack *s){
+   * half is used. Returns 0 on success, -1 on allocation failure. */
+int stack_resize(stack *s){
 	int32_t new_capacity;
 	if (s->top == s->capacity)
 		new_capacity = s->capacity * 2;
 	else if (s->top < s->capacity / 2)
 		new_capacity = s->capacity / 2;
-	else 
-		return;
+	else
+		return 0;
 	array_instance **new_data = malloc((size_t)new_capacity * sizeof(array_instance*));
 	if (new_data == NULL){
 		perror("malloc");
-		return;
+		return -1;
 	}
 	memcpy(new_data, s->stack, (size_t)s->top*sizeof(array_instance*));
 	free(s->stack);
 	s->stack = new_data;
 	s->capacity = new_capacity;
+	return 0;
 }
 
 /* Allocates and initializes a new array_instance with ref_count 1.
@@ -54,24 +55,27 @@ array_instance *new_instance(float *data, coppia shape) {
   }
 
   /* Pushes a new tensor onto the stack. Resizes if at capacity.
-   * Returns silently on allocation failure. */
-void stack_push(stack *s, float *arr, coppia forma) {
+   * Returns 0 on success, -1 on allocation failure. */
+int stack_push(stack *s, float *arr, coppia forma) {
     array_instance *instance = new_instance(arr, forma);
     if (instance == NULL)
-        return;
+        return -1;
 
     if (s->capacity == s->top)
-       stack_resize(s);
-	
+        if (stack_resize(s) != 0) { free(instance); return -1; }
+
     s->stack[s->top++] = instance;
+    return 0;
   }
   
-/* Pushes an existing array_instance onto the stack, incrementing its ref_count. */
-void stack_push_instance(stack *s, array_instance *inst) {
+/* Pushes an existing array_instance onto the stack, incrementing its ref_count.
+ * Returns 0 on success, -1 on allocation failure. */
+int stack_push_instance(stack *s, array_instance *inst) {
     if (s->capacity == s->top)
-        stack_resize(s);
+        if (stack_resize(s) != 0) return -1;
     inst->ref_count++;
     s->stack[s->top++] = inst;
+    return 0;
 }
 
 /* Pops and returns the top element of the stack.
