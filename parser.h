@@ -18,6 +18,11 @@ typedef enum {
 	OP_ADD,
 	OP_SUBTRACTION,
 	OP_PRODUCT,
+	OP_GREATER,
+	OP_LESSER,
+	OP_CONFRONT,
+	OP_AND,
+	OP_OR,
 
 	OP_UNKNOWN
 }OpCode;

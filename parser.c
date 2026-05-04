@@ -8,7 +8,12 @@ static dictionary table[] = {
 	{"d", OP_DUPLICATE},
 	{"+", OP_ADD},
 	{"-", OP_SUBTRACTION},
-	{"*", OP_PRODUCT}
+	{"*", OP_PRODUCT},
+	{">", OP_GREATER},
+	{"<", OP_LESSER},
+	{"=", OP_CONFRONT},
+	{"&", OP_AND},
+	{"|", OP_OR}
 };
 
 
@@ -97,10 +102,11 @@ int pop_print_as_matrix(stack *my_stack){
 	array_instance *last = stack_pop(my_stack);
 	if (last == NULL) return -1;
 	printf("on top of the stack was\n");
+	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	for (int i = 0; i < last->shape.row; i++){
 		printf("[ ");
 		for (int j = 0; j < last->shape.col; j++){
-			printf("%f ", last->data[j * last->shape.row + i]);
+			printf("%f ", last->data[i * last->shape.col + j]);
 		}
 		printf("]\n");
 	}
@@ -133,25 +139,135 @@ int algebra (stack *my_stack, char op) {
 	if (a->shape.row != b->shape.row || a->shape.col != b->shape.col){
 		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
 			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
+			instance_free(a);
+			if (b != a) instance_free(b);
 			return -1;
 	}
 	float *new_data =  calloc((size_t)(a->shape.row * a->shape.col), sizeof(float));
+	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'a'){
 		for (int i = 0; i < a->shape.row; i++) {
 			for (int j = 0; j < a->shape.col; j++) {
-				new_data[j * a->shape.row +i] = a->data[j * a->shape.row +i] + b->data[j * a->shape.row +i];
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] + b->data[i * a->shape.col + j];
 			}
 		}
 	} else if(op == 's'){
 		for (int i = 0; i < a->shape.row; i++) {
 			for (int j = 0; j < a->shape.col; j++) {
-				new_data[j * a->shape.row +i] = a->data[j * a->shape.row +i] - b->data[j * a->shape.row +i];
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] - b->data[i * a->shape.col + j];
 			}
 		}
 	} else if(op == 'p'){
 		for (int i = 0; i < a->shape.row; i++) {
 			for (int j = 0; j < a->shape.col; j++) {
-				new_data[j * a->shape.row +i] = a->data[j * a->shape.row +i] * b->data[j * a->shape.row +i];
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] * b->data[i * a->shape.col + j];
+			}
+		}
+	}
+	coppia shape;
+	shape.row = a->shape.row;
+	shape.col = a->shape.col;
+	
+	instance_free(a);
+	/* b può puntare allo stesso blocco di a se l'operando è stato duplicato con 'd'
+	 * (duplicate non copia i dati, incrementa solo ref_count).
+	 * In quel caso instance_free(a) ha già azzerato ref_count e liberato la memoria,
+	 * quindi non dobbiamo liberare b una seconda volta. */
+	if (b != a)
+		instance_free(b);
+	
+	stack_push(my_stack,new_data,shape);
+	return 0;
+}
+
+int disuguaglianze (stack *my_stack, char op) {
+	array_instance *a = stack_pop(my_stack);
+	if (a == NULL) return -1;
+	array_instance *b = stack_pop(my_stack);
+	if (b == NULL) { instance_free(a); return -1; }
+	if (a->shape.row != b->shape.row || a->shape.col != b->shape.col){
+		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
+			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
+			instance_free(a);
+			if (b != a) instance_free(b);
+			return -1;
+	}
+	float *new_data =  calloc((size_t)(a->shape.row * a->shape.col), sizeof(float));
+	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
+	if (op == 'M'){
+		for (int i = 0; i < a->shape.row; i++) {
+			for (int j = 0; j < a->shape.col; j++) {
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] > b->data[i * a->shape.col + j];
+			}
+		}
+	} else if(op == 'm'){
+		for (int i = 0; i < a->shape.row; i++) {
+			for (int j = 0; j < a->shape.col; j++) {
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] < b->data[i * a->shape.col + j];
+			}
+		}
+	} else if(op == 'u'){
+		for (int i = 0; i < a->shape.row; i++) {
+			for (int j = 0; j < a->shape.col; j++) {
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] == b->data[i * a->shape.col + j];
+			}
+		}
+	}
+	coppia shape;
+	shape.row = a->shape.row;
+	shape.col = a->shape.col;
+	
+	instance_free(a);
+	/* b può puntare allo stesso blocco di a se l'operando è stato duplicato con 'd'
+	 * (duplicate non copia i dati, incrementa solo ref_count).
+	 * In quel caso instance_free(a) ha già azzerato ref_count e liberato la memoria,
+	 * quindi non dobbiamo liberare b una seconda volta. */
+	if (b != a)
+		instance_free(b);
+	
+	stack_push(my_stack,new_data,shape);
+	return 0;
+}
+
+int op_logiche_2_arg (stack *my_stack, char op) {
+	array_instance *a = stack_pop(my_stack);
+	if (a == NULL) return -1;
+	array_instance *b = stack_pop(my_stack);
+	if (b == NULL) { instance_free(a); return -1; }
+	if (a->shape.row != b->shape.row || a->shape.col != b->shape.col){
+		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
+			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
+			instance_free(a);
+			return -1;
+	}
+	for (int i = 0; i < a->shape.row; i++) {
+		for (int j = 0; j < a->shape.col; j++) {
+			if (a->data[i * a->shape.col + j] != 0.f && a->data[i * a->shape.col + j] != 1.f) {
+				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del primo tensore è %f\n", i, j, a->data[i * a->shape.col + j]);
+				instance_free(a);
+				if (b != a) instance_free(b);
+				return -2;
+			}
+			if (b->data[i * a->shape.col + j] != 0.f && b->data[i * a->shape.col + j] != 1.f) {
+				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del secondo tensore è %f\n", i, j, b->data[i * a->shape.col + j]);
+				instance_free(a);
+				if (b != a) instance_free(b);
+				return -2;
+			}
+		}
+	}
+	float *new_data =  calloc((size_t)(a->shape.row * a->shape.col), sizeof(float));
+	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
+	if (op == 'a'){
+		for (int i = 0; i < a->shape.row; i++) {
+			for (int j = 0; j < a->shape.col; j++) {
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] && b->data[i * a->shape.col + j];
+			}
+		}
+	} else if(op == 'o'){
+		for (int i = 0; i < a->shape.row; i++) {
+			for (int j = 0; j < a->shape.col; j++) {
+				new_data[i * a->shape.col + j] = a->data[i * a->shape.col + j] || b->data[i * a->shape.col + j];
 			}
 		}
 	}
@@ -174,6 +290,8 @@ int algebra (stack *my_stack, char op) {
 
 
 
+
+
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Input: s — null-terminated script string, my_stack — the execution stack.
  * Output: 0 on success, -1 on error. */
@@ -182,20 +300,33 @@ int parser(char *s,stack *my_stack){
 	for (int i = 0; i < size; i++){
 		char token[2] = {s[i], '\0'};
  		switch(lookup(token)){
-			case OP_NEW_ARRAY:{ 
-			int result = parse_array(s, i+1, my_stack);
-			if (result == -1) return -1;
-				i += result;
-			break;}
 			
+			case OP_NEW_ARRAY:{ 
+				int result = parse_array(s, i+1, my_stack);
+				if (result == -1) return -1;
+					i += result;
+				break;}
 			case OP_PRINT_N_POP: pop_print(my_stack); break;
 			case OP_PRINT_MATRIX: pop_print_as_matrix(my_stack); break;
 			case OP_DUPLICATE: duplicate(my_stack);  break;
 			case OP_ADD: if (algebra(my_stack, 'a') != 0) return -1; break;
 			case OP_SUBTRACTION: if (algebra(my_stack, 's') != 0) return -1; break;
 			case OP_PRODUCT: if (algebra(my_stack, 'p') != 0) return -1; break;
-			
-			
+			case OP_GREATER: if (disuguaglianze(my_stack, 'M') != 0) return -1; break;
+			case OP_LESSER: if (disuguaglianze(my_stack, 'm') != 0) return -1; break;
+			case OP_CONFRONT: if (disuguaglianze(my_stack, 'u') != 0) return -1; break;
+			case OP_AND:{int err = op_logiche_2_arg(my_stack, 'a');
+				if (err != 0) return err;
+				break;
+				}
+			case OP_OR:{int err = op_logiche_2_arg(my_stack, 'o');
+				if (err != 0) return err;
+				break;
+				}
+
+
+
+
 			default:
 				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
 					printf("errore comando sconosciuto: '%c'\n", s[i]);
@@ -205,7 +336,5 @@ int parser(char *s,stack *my_stack){
 		}
 	}
 	
-	return 0 ;
-	
-	
+	return 0 ;	
 }
