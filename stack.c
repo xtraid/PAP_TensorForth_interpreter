@@ -87,8 +87,7 @@ array_instance *stack_pop(stack *s){
 		return NULL;
 		}
     array_instance *last = s->stack[--s->top];
-    last->ref_count--;
-    if (s->top < s->capacity / 2)
+    if (s->top < s->capacity / 4)
         stack_resize(s);
     return last;
 }
@@ -98,6 +97,7 @@ array_instance *stack_pop(stack *s){
 /* Decrements ref_count and frees the instance if no references remain. */
 void instance_free (array_instance *i){
 	if (i == NULL) return;
+	i->ref_count--;
 	if (i->ref_count <= 0){
 		free(i->data);
 		free(i);

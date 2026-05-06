@@ -23,6 +23,10 @@ typedef enum {
 	OP_CONFRONT,
 	OP_AND,
 	OP_OR,
+	OP_NOT,
+	OP_MASK,
+	OP_MAT_MUL,
+	OP_RESHAPE,
 
 	OP_UNKNOWN
 }OpCode;
@@ -32,11 +36,11 @@ typedef struct{
 	OpCode op;	
 }dictionary;
  
-OpCode lookup(char *token);
+OpCode lookup(const char *token);
 
-int parser(char *s, stack *my_stack);
+int parser(const char *s, stack *my_stack);
 
-int parse_array(char *arr, int offset, stack *my_stack);
+int parse_array(const char *arr, int offset, stack *my_stack);
 
 int pop_print(stack *my_stack);
 
@@ -46,5 +50,14 @@ int duplicate (stack *my_stack);
 
 int algebra (stack *my_stack, char op);
 
+int op_logiche_2_arg (stack *my_stack, char op);
+
+int op_not (stack *my_stack);
+
+int mask (stack *my_stack);
+
+int mat_mat_mul(stack *my_stack);
+
+int op_reshape(stack *my_stack);
 
 #endif
