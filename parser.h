@@ -27,6 +27,8 @@ typedef enum {
 	OP_MASK,
 	OP_MAT_MUL,
 	OP_RESHAPE,
+	OP_SUM,
+	OP_DOT,
 
 	OP_UNKNOWN
 }OpCode;

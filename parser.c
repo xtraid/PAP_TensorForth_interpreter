@@ -17,7 +17,9 @@ static dictionary table[] = {
 	{"!", OP_NOT},
 	{"$", OP_MASK},
 	{"@", OP_MAT_MUL},
-	{"r", OP_RESHAPE}
+	{"r", OP_RESHAPE},
+	{"S", OP_SUM},
+	{".", OP_DOT}
 
 };
 
@@ -49,9 +51,11 @@ int parse_array(const char *s, int offset, stack *my_stack){
 	float *new_array = NULL;
 	int consumati = 0;
 
-	while (s[offset] != '\0' && s[offset] != ']'){
+	offset++;  // salta lo spazio obbligatorio dopo '['
+
+	while (s[offset] != '\0' && s[offset] != ']') {
 		float val;
-		if (sscanf(s + offset, " %f%n", &val, &consumati) == 1) { // magia nera di sscanf %f%n
+		if (sscanf(s + offset, "%f%n", &val, &consumati) == 1) {
 			float *tmp = realloc(new_array, sizeof(float) * (size_t)(count + 1));
 			if (tmp == NULL) {
 				free(new_array);
@@ -60,9 +64,10 @@ int parse_array(const char *s, int offset, stack *my_stack){
 			new_array = tmp;
 			new_array[count] = val;
 			count++;
-			offset += consumati;
+			offset += consumati + 1;  // +1 = spazio dopo il float
 		} else {
-			offset++;
+			printf("errore valore inserito non è un float: %c, continua la lettura ignorando il carattere\n", s[offset]);
+			offset += 2;  // salta il char invalido + lo spazio dopo
 		}
 	}
 
@@ -451,9 +456,8 @@ static void transpose(float *data, float *new_data, int rows, int cols){
 /* kernel e blocked_multiply ricevono B già trasposta (B_T shape [b_cols × a_cols]).
  * C[i][j] += A[i][k] * B_T[j][k]  =  C = A * B_originale
  * Entrambi gli accessi sono sequenziali in k -> cache friendly. */
-static void kernel(float *A, float *B_T, float *C,
-                   int x, int dx, int y, int dy, int z, int dz,
-                   int a_rows, int a_cols, int b_cols){
+static void kernel(float *A, float *B_T, float *C, int x, int dx, int y, int dy, int z, int dz, int a_rows, int a_cols, int b_cols){
+
 	int mx = (x + dx > a_rows) ? a_rows : x + dx;
 	int my = (y + dy > b_cols) ? b_cols : y + dy;
 	int mz = (z + dz > a_cols) ? a_cols : z + dz;
@@ -463,8 +467,10 @@ static void kernel(float *A, float *B_T, float *C,
 				C[i * b_cols + j] += A[i * a_cols + k] * B_T[j * a_cols + k];
 }
 
-static void blocked_multiply(float *A, float *B_T, float *C,
-                             int a_rows, int a_cols, int b_cols){
+/* Multiplica A [a_rows × a_cols] per B_T [b_cols × a_cols] (già trasposta) e accumula in C [a_rows × b_cols].
+ * Suddivide il lavoro in blocchi di dimensione s1×s2×s3 per migliorare la località di cache;
+ * parallelizza i loop esterni con OpenMP. */
+static void blocked_multiply(float *A, float *B_T, float *C, int a_rows, int a_cols, int b_cols){
 	const int s1 = 16, s2 = 16, s3 = 16;
 	#pragma omp parallel for collapse(2) schedule(dynamic)
 	for (int i = 0; i < a_rows; i += s1)
@@ -474,7 +480,7 @@ static void blocked_multiply(float *A, float *B_T, float *C,
 }
 
 /* Pops a (top) and b from the stack and pushes a@b (matrix product).
- * Requires a.cols == b.rows. Result shape is [a.rows x b.cols].
+ * Requires a.cols == b.rows and rows > 1. Result shape is [a.rows x b.cols].
  * Transposes b internally for cache-friendly access, then uses blocked_multiply.
  * Input: my_stack — the stack.
  * Output: 0 on success, -1 on error. */
@@ -492,6 +498,13 @@ int mat_mat_mul(stack *my_stack){
 	if (a_cols != b_rows){
 		fprintf(stderr, "errore: shape incompatibili per prodotto matriciale a[%d %d] b[%d %d]\n",
 			a_rows, a_cols, b_rows, b_cols);
+		instance_free(a);
+		instance_free(b);
+		return -1;
+	}
+	
+	if (a_cols <= 1) {
+		fprintf (stderr, " errore: le matrici devono essere bidimensionali");
 		instance_free(a);
 		instance_free(b);
 		return -1;
@@ -514,6 +527,65 @@ int mat_mat_mul(stack *my_stack){
 }
 
 
+/* Pops the top tensor and pushes a scalar [1×1] with the sum of all its elements.
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int sum_arr (stack *my_stack){
+	array_instance *arr = stack_pop(my_stack);
+	if (arr == NULL) return -1;
+	int n = arr->shape.row * arr->shape.col;
+	float *sum = malloc (sizeof(float));
+	sum[0]= 0;
+	
+	for (int i = 0; i < n; i++)
+		sum[0] += arr->data[i];
+	
+	instance_free(arr);
+	
+	coppia shape;
+	shape.row = 1;
+	shape.col = 1;
+	stack_push(my_stack, sum, shape);
+	return 0;
+}
+
+
+/* Pops two 1D vectors (shape [1×n]) and pushes a scalar [1×1] with their dot product.
+ * Both operands must be row vectors (shape.row == 1) of equal length.
+ * Input: my_stack — the stack (top: a, then b).
+ * Output: 0 on success, -1 on error. */
+int dot_product (stack *my_stack){
+	array_instance *a = stack_pop(my_stack);
+	if (a == NULL) return -1;
+	array_instance *b = stack_pop(my_stack);
+	if (b == NULL) {
+		instance_free (a);
+		return -1;
+	}
+	if (a->shape.row > 1) {
+		fprintf (stderr, " errore: il primo argomento non è un vettore");
+		return -1;	
+	}
+	if (b->shape.row > 1) {
+		fprintf (stderr, " errore: il secondo argomento non è un vettore");
+		return -1;	
+	}
+	int n = a->shape.col;
+	float *sum = malloc (sizeof(float));
+	sum[0]= 0;
+	
+	for (int i = 0; i < n; i++)
+		sum[0] += a->data[i] * b->data[i];
+	
+	instance_free(a);
+	instance_free(b);
+	
+	coppia shape;
+	shape.row = 1;
+	shape.col = 1;
+	stack_push(my_stack, sum, shape);
+	return 0;
+}
 
 
 
@@ -565,11 +637,14 @@ int parser(const char *s, stack *my_stack){
 				if (err != 0) return err;
 				break;
 				}
+			case OP_SUM: if (sum_arr(my_stack) != 0) return -1; break;
+			case OP_DOT: if (dot_product(my_stack) != 0) return -1; break;
 
 			default:
 				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
 					printf("errore comando sconosciuto: '%c'\n", s[i]);
 				break;
+			
 
 
 		}
