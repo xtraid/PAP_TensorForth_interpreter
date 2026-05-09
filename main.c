@@ -13,10 +13,10 @@ int main (int argc, char *argv[]){
 	}
 	char *script = get_command(f);
 	fclose(f);
-	printf("Il file contiene:\n%s\n",script);
-	
 	stack *my_stack = stack_init();
 	int err = parser(script, my_stack);
+	free(script);
+	stack_free(my_stack);
 	return err;
 	
 }

@@ -45,17 +45,29 @@ OpCode lookup(const char *token){
  * Previously: two passes — first counted elements (malloc once), then re-read to fill.
  * Now: single pass with realloc at each element; slower on large arrays but simpler. */
 // perf: const on s — communicates read-only intent, enables compiler alias analysis
-int parse_array(const char *s, int offset, stack *my_stack){
-	int start = offset;
-	int count = 0;
+long parse_array(const char *s, long offset, stack *my_stack){
+	long start = offset;
+	int count = 0;       /* elementi: mai > INT_MAX in pratica */
 	float *new_array = NULL;
-	int consumati = 0;
+	int consumati = 0;   /* %n di sscanf scrive sempre in int */
 
+	if (s[offset] != ' ') {
+		fprintf(stderr, "errore: manca lo spazio obbligatorio dopo '['\n");
+		return -1;
+	}
 	offset++;  // salta lo spazio obbligatorio dopo '['
 
 	while (s[offset] != '\0' && s[offset] != ']') {
 		float val;
 		if (sscanf(s + offset, "%f%n", &val, &consumati) == 1) {
+			if (s[offset + consumati] != ' ') {
+				if (s[offset + consumati] == ']')
+					fprintf(stderr, "errore: manca lo spazio obbligatorio prima di ']'\n");
+				else
+					fprintf(stderr, "errore: manca lo spazio dopo il valore %g\n", val);
+				free(new_array);
+				return -1;
+			}
 			float *tmp = realloc(new_array, sizeof(float) * (size_t)(count + 1));
 			if (tmp == NULL) {
 				free(new_array);
@@ -64,15 +76,15 @@ int parse_array(const char *s, int offset, stack *my_stack){
 			new_array = tmp;
 			new_array[count] = val;
 			count++;
-			offset += consumati + 1;  // +1 = spazio dopo il float
+			offset += consumati + 1;  // +1 = spazio obbligatorio dopo il float (verificato sopra)
 		} else {
-			printf("errore valore inserito non è un float: %c, continua la lettura ignorando il carattere\n", s[offset]);
+			fprintf(stderr, "errore valore inserito non è un float: %c, continua la lettura ignorando il carattere\n", s[offset]);
 			offset += 2;  // salta il char invalido + lo spazio dopo
 		}
 	}
 
 	if (s[offset] == '\0') {
-		printf("errore di inserimento manca la chiusura ']' nella descrizione dell array");
+		fprintf(stderr, "errore di inserimento manca la chiusura ']' nella descrizione dell array\n");
 		free(new_array);
 		return -1;
 	}
@@ -194,7 +206,8 @@ int algebra (stack *my_stack, char op) {
 		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
 			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
 			instance_free(a);
-			if (b != a) instance_free(b);
+			/* instance_free usa ref_count: chiamarlo due volte è sicuro anche se a==b (2→1→0) */
+			instance_free(b);
 			return -1;
 	}
 	// perf: hoisted a->shape.row, a->shape.col, a->data, b->data — avoids reload each iteration
@@ -204,6 +217,7 @@ int algebra (stack *my_stack, char op) {
 	float * restrict b_data = b->data;
 	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'a'){
 		for (int i = 0; i < rows; i++) {
@@ -231,7 +245,7 @@ int algebra (stack *my_stack, char op) {
 	instance_free(a);
 	instance_free(b);
 
-	stack_push(my_stack,new_data,shape);
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
 
@@ -248,7 +262,7 @@ int disuguaglianze (stack *my_stack, char op) {
 		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
 			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
 			instance_free(a);
-			if (b != a) instance_free(b);
+			instance_free(b);
 			return -1;
 	}
 	// perf: hoisted a->shape.row, a->shape.col, a->data, b->data — avoids reload each iteration
@@ -258,6 +272,7 @@ int disuguaglianze (stack *my_stack, char op) {
 	float * restrict b_data = b->data;
 	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'M'){
 		for (int i = 0; i < rows; i++) {
@@ -285,7 +300,7 @@ int disuguaglianze (stack *my_stack, char op) {
 	instance_free(a);
 	instance_free(b);
 
-	stack_push(my_stack,new_data,shape);
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
 
@@ -302,6 +317,7 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n",
 			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
 			instance_free(a);
+			instance_free(b);
 			return -1;
 	}
 	// perf: hoisted a->shape.row, a->shape.col, a->data, b->data — avoids reload each iteration
@@ -314,19 +330,20 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 			if (a_data[i * cols + j] != 0.f && a_data[i * cols + j] != 1.f) {
 				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del primo tensore è %f\n", i, j, a_data[i * cols + j]);
 				instance_free(a);
-				if (b != a) instance_free(b);
+				instance_free(b);
 				return -2;
 			}
 			if (b_data[i * cols + j] != 0.f && b_data[i * cols + j] != 1.f) {
 				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del secondo tensore è %f\n", i, j, b_data[i * cols + j]);
 				instance_free(a);
-				if (b != a) instance_free(b);
+				instance_free(b);
 				return -2;
 			}
 		}
 	}
 	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'a'){
 		for (int i = 0; i < rows; i++) {
@@ -348,7 +365,7 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 	instance_free(a);
 	instance_free(b);
 
-	stack_push(my_stack,new_data,shape);
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
 
@@ -365,6 +382,7 @@ int op_not (stack *my_stack){
 	float * restrict a_data = a->data;
 	// perf: restrict on new_data — guarantees no aliasing with a_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	if (new_data == NULL) { instance_free(a); return -1; }
 	for (int i = 0; i < rows; i++){
 		for (int j = 0; j < cols; j++){
 			float val = a_data[i * cols + j];
@@ -382,7 +400,7 @@ int op_not (stack *my_stack){
 	shape.row = rows;
 	shape.col = cols;
 	instance_free(a);
-	stack_push(my_stack, new_data, shape);
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
 
@@ -394,18 +412,25 @@ int mask (stack *my_stack) {
 	array_instance *m = stack_pop(my_stack);
 	if (m == NULL) return -1;
 	array_instance *a = stack_pop(my_stack);
-	if (a == NULL) return -1;
+	if (a == NULL) { 
+		instance_free(m); return -1;
+		}
 	array_instance *b = stack_pop(my_stack);
-	if (b == NULL) return -1;
+	if (b == NULL) { 
+		instance_free(m);
+		instance_free(a); 
+		return -1; }
 
 	if (a->shape.row != b->shape.row || a->shape.col != b->shape.col){
 		fprintf(stderr, "errore: shape incompatibili a[%d %d] != b[%d %d]\n",
 			a->shape.row, a->shape.col, b->shape.row, b->shape.col);
+		instance_free(m); instance_free(a); instance_free(b);
 		return -1;
 	}
 	if (a->shape.row != m->shape.row || a->shape.col != m->shape.col){
 		fprintf(stderr, "errore: shape incompatibili a[%d %d] != m[%d %d]\n",
 			a->shape.row, a->shape.col, m->shape.row, m->shape.col);
+		instance_free(m); instance_free(a); instance_free(b);
 		return -1;
 	}
 
@@ -427,6 +452,12 @@ int mask (stack *my_stack) {
 		}
 	}
 	float *new_data = malloc(sizeof(float)*(size_t)(m_rows*m_cols));
+	if (new_data == NULL) { 
+		instance_free(m);
+		instance_free(a);
+		instance_free(b);
+		return -1; 
+		}
 	for (int i = 0; i < m_rows; i++){
 		for (int j = 0; j < m_cols; j++){
 			new_data[i * m_cols + j] = m->data[i * m_cols + j]*a->data[i * m_cols + j]+(1-m->data[i * m_cols + j])*b->data[i * m_cols + j];
@@ -534,18 +565,19 @@ int sum_arr (stack *my_stack){
 	array_instance *arr = stack_pop(my_stack);
 	if (arr == NULL) return -1;
 	int n = arr->shape.row * arr->shape.col;
-	float *sum = malloc (sizeof(float));
-	sum[0]= 0;
-	
+	float *sum = malloc(sizeof(float));
+	if (sum == NULL) { instance_free(arr); return -1; }
+	sum[0] = 0;
+
 	for (int i = 0; i < n; i++)
 		sum[0] += arr->data[i];
-	
+
 	instance_free(arr);
-	
+
 	coppia shape;
 	shape.row = 1;
 	shape.col = 1;
-	stack_push(my_stack, sum, shape);
+	if (stack_push(my_stack, sum, shape) != 0) { free(sum); return -1; }
 	return 0;
 }
 
@@ -562,30 +594,48 @@ int dot_product (stack *my_stack){
 		instance_free (a);
 		return -1;
 	}
+	
 	if (a->shape.row > 1) {
 		fprintf (stderr, " errore: il primo argomento non è un vettore");
-		return -1;	
+		instance_free(a);
+		instance_free(b);
+		return -1;
 	}
 	if (b->shape.row > 1) {
 		fprintf (stderr, " errore: il secondo argomento non è un vettore");
+		instance_free(a);
+        instance_free(b);
 		return -1;	
 	}
+	if (a->shape.col != b->shape.col) {
+		fprintf(stderr, "errore: lunghezze incompatibili [%d] != [%d]\n", a->shape.col, b->shape.col);
+		instance_free(a);
+		instance_free(b);
+		return -1;
+	}
 	int n = a->shape.col;
-	float *sum = malloc (sizeof(float));
-	sum[0]= 0;
-	
+	float *sum = malloc(sizeof(float));
+	if (sum == NULL) { instance_free(a); instance_free(b); return -1; }
+	sum[0] = 0;
+
 	for (int i = 0; i < n; i++)
 		sum[0] += a->data[i] * b->data[i];
-	
+
 	instance_free(a);
 	instance_free(b);
-	
+
 	coppia shape;
 	shape.row = 1;
 	shape.col = 1;
-	stack_push(my_stack, sum, shape);
+	if (stack_push(my_stack, sum, shape) != 0) { free(sum); return -1; }
 	return 0;
 }
+
+
+
+// i/o
+
+// wip int immage_reader (stack *my_stack;)
 
 
 
@@ -595,12 +645,12 @@ int dot_product (stack *my_stack){
 // perf: const on s — communicates read-only intent, enables compiler alias analysis
 int parser(const char *s, stack *my_stack){
 	long size = (long)strlen(s);
-	for (int i = 0; i < size; i++){
+	for (long i = 0; i < size; i++){
 		char token[2] = {s[i], '\0'};
  		switch(lookup(token)){
 
 			case OP_NEW_ARRAY:{
-				int result = parse_array(s, i+1, my_stack);
+				long result = parse_array(s, i+1, my_stack);
 				if (result == -1) return -1;
 					i += result;
 				break;}
@@ -642,7 +692,7 @@ int parser(const char *s, stack *my_stack){
 
 			default:
 				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
-					printf("errore comando sconosciuto: '%c'\n", s[i]);
+					fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
 				break;
 			
 

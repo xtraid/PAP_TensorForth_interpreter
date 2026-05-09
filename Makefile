@@ -2,7 +2,7 @@ CC = gcc
 HEADERS = ${wildcard *.h}
 SRC = ${wildcard *.c}
 OBJ = ${SRC:.c=.o}
-DEBUG = TRUE
+DEBUG = F
 ifeq "${DEBUG}" "TRUE"
 	CFLAGS = -O0 -g -std=c17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes -fopenmp #most annoying warning possible so i can make it right
 else
@@ -21,4 +21,4 @@ TensorForth: ${OBJ}
 
 clean:
 	rm -f ${OBJ}
-	rm -f TensorFort
+	rm -f TensorForth

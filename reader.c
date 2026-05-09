@@ -22,6 +22,10 @@ char* get_command (FILE *fd){
 		return NULL;
 	}
 	long size = ftell(fd);
+	if (size < 0) { 
+		perror("ftell");
+		return NULL; 
+		}
 	rewind(fd);
 	char *string = malloc(sizeof(char)*(size_t)(size+1)); //ftell restituisce long (con segno). sizeof restituisce size_t (senza segno). Moltiplicarli assieme può dare un numero enorme se size fosse negativo
 	for (long i = 0; i < size; i++){

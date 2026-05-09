@@ -9,7 +9,7 @@ stack* stack_init(void){
 	}
 	s->top = 0;
 	s->capacity = 1;
-	s->stack = malloc((size_t)s->capacity*sizeof(array_instance*));
+	s->stack = malloc((size_t)s->capacity*sizeof(stack_item));
 	if (s->stack == NULL){
 		perror("malloc");
 		free(s);
@@ -28,12 +28,12 @@ int stack_resize(stack *s){
 		new_capacity = s->capacity / 2;
 	else
 		return 0;
-	array_instance **new_data = malloc((size_t)new_capacity * sizeof(array_instance*));
+	stack_item *new_data = malloc((size_t)new_capacity * sizeof(stack_item));
 	if (new_data == NULL){
 		perror("malloc");
 		return -1;
 	}
-	memcpy(new_data, s->stack, (size_t)s->top*sizeof(array_instance*));
+	memcpy(new_data, s->stack, (size_t)s->top * sizeof(stack_item));
 	free(s->stack);
 	s->stack = new_data;
 	s->capacity = new_capacity;
@@ -51,6 +51,8 @@ array_instance *new_instance(float *data, coppia shape) {
     instance->data = data;
     instance->shape = shape;
     instance->ref_count = 1;
+    instance->on_disk = 0;
+    instance->data_offset = 0;
     return instance;
   }
 
@@ -61,10 +63,14 @@ int stack_push(stack *s, float *arr, coppia forma) {
     if (instance == NULL)
         return -1;
 
-    if (s->capacity == s->top)
+    if (s->capacity == s->top){
         if (stack_resize(s) != 0) { free(instance); return -1; }
+	}
 
-    s->stack[s->top++] = instance;
+	stack_item item;
+	item.type = ITEM_TENSOR;
+	item.tensor = instance;
+    s->stack[s->top++] = item;
     return 0;
   }
   
@@ -74,7 +80,10 @@ int stack_push_instance(stack *s, array_instance *inst) {
     if (s->capacity == s->top)
         if (stack_resize(s) != 0) return -1;
     inst->ref_count++;
-    s->stack[s->top++] = inst;
+	stack_item item;
+	item.type = ITEM_TENSOR;
+	item.tensor = inst;
+    s->stack[s->top++] = item;
     return 0;
 }
 
@@ -86,10 +95,16 @@ array_instance *stack_pop(stack *s){
         fprintf(stderr, "stack underflow\n");
 		return NULL;
 		}
-    array_instance *last = s->stack[--s->top];
+    stack_item item = s->stack[--s->top];
+    if (item.type == ITEM_STRING) {
+        fprintf(stderr, "errore: atteso tensore, trovato stringa \"%s\"\n", item.filename);
+        free(item.filename);
+        if (s->top < s->capacity / 4) stack_resize(s);
+        return NULL;
+    }
     if (s->top < s->capacity / 4)
         stack_resize(s);
-    return last;
+    return item.tensor;
 }
 	
 	
@@ -108,10 +123,39 @@ void instance_free (array_instance *i){
    * Respects ref_count: instances shared via dup/over are freed only when all references are gone. */
 void stack_free(stack *s){
 	while (s->top > 0){
-		array_instance *inst = stack_pop(s);
-		instance_free(inst);
+		stack_item item = stack_pop_item(s);
+        if (item.type == ITEM_TENSOR)
+            instance_free(item.tensor);
+        else
+            free(item.filename);
 	}
 	free(s->stack);
 	free(s);
 }
+/* Pushes a filename string onto the stack. Makes a copy of the string.
+   * Returns 0 on success, -1 on allocation failure. */
+int stack_push_string(stack *s, const char *filename){
+	if (s->capacity == s->top)
+		if(stack_resize(s) != 0) return -1;
+	stack_item item;
+	item.type = ITEM_STRING;
+	item.filename = malloc(strlen(filename) + 1);
+	if (item.filename == NULL) { perror("malloc"); return -1; }
+	strcpy(item.filename, filename);
+	s->stack[s->top++] = item;
+	return 0;	
+}
 
+
+/* Pops and returns the top stack_item (tensor or string).
+   * Caller must free item.filename if type == ITEM_STRING. */
+  stack_item stack_pop_item(stack *s) {
+	stack_item empty = {0};
+	if (s->top == 0) { 
+		fprintf(stderr, "stack underflow\n"); return empty;
+	}
+	stack_item item = s->stack[--s->top];
+	if (s->top < s->capacity / 4)
+        stack_resize(s);
+	return item;
+  }

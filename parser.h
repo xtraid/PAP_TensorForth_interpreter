@@ -42,7 +42,7 @@ OpCode lookup(const char *token);
 
 int parser(const char *s, stack *my_stack);
 
-int parse_array(const char *arr, int offset, stack *my_stack);
+long parse_array(const char *arr, long offset, stack *my_stack);
 
 int pop_print(stack *my_stack);
 
@@ -61,5 +61,11 @@ int mask (stack *my_stack);
 int mat_mat_mul(stack *my_stack);
 
 int op_reshape(stack *my_stack);
+
+int disuguaglianze(stack *my_stack, char op);
+
+int sum_arr(stack *my_stack);
+
+int dot_product(stack *my_stack);
 
 #endif
