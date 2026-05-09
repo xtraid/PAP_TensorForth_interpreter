@@ -68,6 +68,8 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `r` | reshape | `(shape a -- a')` | Reshape `a` to dimensions given by `shape` (a `[1×1]` or `[1×2]` tensor) |
 | `S` | sum | `(a -- s)` | Sum all elements, push result as `[1×1]` tensor |
 | `.` | dot product | `(a b -- d)` | Dot product of two row vectors, push result as `[1×1]` tensor |
+| `"…"` | push string | `( -- s)` | Push the filename literal `…` onto the stack as a string item |
+| `(` | load tensor | `(s -- a)` | Pop filename string, read binary `.bin` file, push resulting tensor |
 
 ---
 
@@ -111,6 +113,11 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 [ 1.0 2.0 3.0 4.0 5.0 ] S p
 ```
 
+**Load a tensor from a binary file:**
+```
+"tests/test_tensor.bin" ( p
+```
+
 ---
 
 ## Implementation Notes
@@ -134,6 +141,19 @@ All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N
 ### Array literal parsing
 
 `parse_array` uses two passes: the first validates strict syntax and counts elements; the second allocates a single block and fills it. This avoids `realloc` churn and ensures memory is allocated exactly once per literal.
+
+### Binary tensor format
+
+Binary `.bin` files are read by `read_immage`. The file starts with a fixed-size header:
+
+```
+int32_t shape[MAX_DIM]   // shape[0]=rows, shape[1]=cols
+int32_t ndim             // 1 or 2
+<4 bytes padding>        // compiler-inserted for off_t alignment
+off_t   data_offset      // byte offset where float data begins
+```
+
+Float data starts at `data_offset` and contains `rows * cols` IEEE 754 single-precision values in row-major order. If `ndim == 1`, `col` is set to 1 and the tensor is treated as a column vector.
 
 ---
 
