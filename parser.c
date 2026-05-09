@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "stack.h"
 #include <ctype.h>
+#include <sys/types.h>
 
 static dictionary table[] = {
 	{"[", OP_NEW_ARRAY},
@@ -20,7 +21,9 @@ static dictionary table[] = {
 	{"@", OP_MAT_MUL},
 	{"r", OP_RESHAPE},
 	{"S", OP_SUM},
-	{".", OP_DOT}
+	{".", OP_DOT},
+	{"\"", OP_READ_NAME},
+	{"(", OP_LOAD_TENSOR}
 
 };
 
@@ -637,6 +640,78 @@ int dot_product (stack *my_stack){
 
 
 
+/* Parses a string literal starting after the opening '"' at s[offset].
+ * Reads until the closing '"', allocates a copy and pushes it on the stack.
+ * Input: s — full script string, offset — index of first char after '"', my_stack — destination stack.
+ * Output: number of characters consumed (including closing '"'), or -1 on error. */
+long parse_string(const char *s, long offset, stack *my_stack) {
+    int consumati = 0;
+    char buf[256];
+    sscanf(s + offset, "%255[^\"]%n", buf, &consumati);
+    if (consumati == 0 || s[offset + consumati] != '"') {
+        fprintf(stderr, "errore: stringa malformata\n");
+        return -1;
+    }
+    char *nome = malloc(strlen(buf) + 1);
+    if (!nome) return -1;
+    strcpy(nome, buf);
+    stack_push_string(my_stack, nome);
+    return 1 + consumati;
+}
+
+/* Pops a filename string from the stack, opens the binary tensor file, reads
+ * the header (shape, ndim, data_offset) and the float data, and pushes the tensor.
+ * Input: my_stack — the stack (top must be a string item with the file path).
+ * Output: 0 on success, -1 on error. */
+int read_immage(stack *my_stack) {
+    stack_item item = stack_pop_item(my_stack);
+    if (item.type != ITEM_STRING) { return -1; }
+	char *path = item.filename;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror("fopen");
+	free(path);
+	return -1;
+	}
+
+    /* Legge l'header come struct intera: il compilatore inserisce 4 byte di padding
+     * tra ndim (int32_t) e data_offset (off_t) per allineamento a 8 byte.
+     * Leggere campo per campo salterebbe quel padding, corrompendo data_offset. */
+    struct { int32_t shape[MAX_DIM]; int32_t ndim; off_t data_offset; } header;
+    if (fread(&header, sizeof(header), 1, f) != 1) { fclose(f); free(path); return -1; }
+    int32_t row = header.shape[0];
+    int32_t col = (header.ndim == 1) ? 1 : header.shape[1];
+    off_t offset = header.data_offset;
+	fseek(f, (long)offset, SEEK_SET);
+    float *new_data = malloc(sizeof(float) * (size_t)(row * col));
+	if (new_data == NULL) {
+		perror("malloc");
+		fclose(f);
+		free(path);
+		return -1;
+	}
+	if (fread(new_data, sizeof(float), (size_t)(row * col), f) != (size_t)(row * col)) {
+		free(new_data); fclose(f); free(path); return -1;
+	}
+	coppia doppia;
+	doppia.row = row;
+	doppia.col = col;
+	array_instance *new_inst = new_instance(new_data, doppia);
+	if (new_inst == NULL) {
+		free(new_data);
+		fclose(f);
+		free(path);
+		return -1;
+	}
+	stack_push_instance(my_stack, new_inst);
+	fclose(f);
+	free(path);
+	return 0;
+
+  }
+
+
+
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Input: s — null-terminated script string, my_stack — the execution stack.
  * Output: 0 on success, -1 on error. */
@@ -686,6 +761,13 @@ int parser(const char *s, stack *my_stack){
 				}
 			case OP_SUM: if (sum_arr(my_stack) != 0) return -1; break;
 			case OP_DOT: if (dot_product(my_stack) != 0) return -1; break;
+			case OP_READ_NAME:{
+				long result = parse_string(s, i+1, my_stack);
+				if (result == -1) return -1;
+					i += result;
+				break;}
+
+			case OP_LOAD_TENSOR: if (read_immage(my_stack) != 0) return -1; break;
 
 			default:
 				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
@@ -697,5 +779,5 @@ int parser(const char *s, stack *my_stack){
 		}
 	}
 
-	return 0 ;
+	return 0;
 }

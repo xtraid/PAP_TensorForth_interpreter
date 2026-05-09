@@ -29,6 +29,8 @@ typedef enum {
 	OP_RESHAPE,
 	OP_SUM,
 	OP_DOT,
+	OP_READ_NAME,
+	OP_LOAD_TENSOR,
 
 	OP_UNKNOWN
 }OpCode;
