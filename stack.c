@@ -24,7 +24,7 @@ int stack_resize(stack *s){
 	int32_t new_capacity;
 	if (s->top == s->capacity)
 		new_capacity = s->capacity * 2;
-	else if (s->top < s->capacity / 2)
+	else if (s->top < s->capacity / 4)
 		new_capacity = s->capacity / 2;
 	else
 		return 0;
@@ -88,8 +88,8 @@ int stack_push_instance(stack *s, array_instance *inst) {
 }
 
 /* Pops and returns the top element of the stack.
-   * Shrinks the stack if less than half capacity is used.
-   * Caller is responsible for calling release_instance when done. */
+   * Shrinks the stack if less than a quarter of capacity is used.
+   * Caller is responsible for calling instance_free when done. */
 array_instance *stack_pop(stack *s){
 	if (s->top == 0){
         fprintf(stderr, "stack underflow\n");

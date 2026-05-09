@@ -11,9 +11,9 @@ TensorForth programs are sequences of single-character opcodes that operate on a
 Requires `gcc` with C17 support and `OpenMP`.
 
 ```sh
-make        # debug build (-O0 -g)
-make CFLAGS="-O3 -fopenmp" all   # optimized build
-make clean  # remove build artifacts
+make              # optimized build (-O3)
+make DEBUG=TRUE   # debug build (-O0 -g)
+make clean        # remove build artifacts
 ```
 
 This produces a `TensorForth` executable.
@@ -22,6 +22,7 @@ This produces a `TensorForth` executable.
 
 ```sh
 ./TensorForth <script.tensorforth>
+./run_tests.sh    # run the test suite (40 tests)
 ```
 
 ## Language Reference
@@ -34,11 +35,19 @@ This produces a `TensorForth` executable.
 
 Pushes a `[1 × N]` tensor onto the stack with the given float values.
 
+**Syntax rules for array literals:**
+- Exactly one space must follow `[`
+- Exactly one space must separate consecutive values
+- Exactly one space must precede `]`
+- Any violation (missing space, double space, non-float token) is a fatal error
+
 To create a matrix, use `r` (reshape) after creating a flat tensor.
 
 ---
 
 ### Operations
+
+Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 
 | Token | Name | Stack effect | Description |
 |-------|------|--------------|-------------|
@@ -46,7 +55,7 @@ To create a matrix, use `r` (reshape) after creating a flat tensor.
 | `P` | print matrix | `(a -- )` | Print tensor row-by-row, then pop |
 | `d` | duplicate | `(a -- a a)` | Duplicate top of stack (no copy, increments ref count) |
 | `+` | add | `(a b -- a+b)` | Element-wise addition |
-| `-` | subtract | `(a b -- a-b)` | Element-wise subtraction |
+| `-` | subtract | `(a b -- a-b)` | Element-wise subtraction (TOS minus second) |
 | `*` | multiply | `(a b -- a*b)` | Element-wise multiplication |
 | `>` | greater | `(a b -- a>b)` | Element-wise comparison, result is boolean tensor |
 | `<` | less | `(a b -- a<b)` | Element-wise comparison, result is boolean tensor |
@@ -54,20 +63,21 @@ To create a matrix, use `r` (reshape) after creating a flat tensor.
 | `&` | and | `(a b -- a&&b)` | Element-wise logical AND (inputs must be boolean) |
 | `\|` | or | `(a b -- a\|\|b)` | Element-wise logical OR (inputs must be boolean) |
 | `!` | not | `(a -- !a)` | Element-wise logical NOT (input must be boolean) |
-| `$` | mask | `(m a b -- r)` | Element-wise conditional: `r[i] = m[i] ? a[i] : b[i]` |
-| `@` | matmul | `(a b -- a@b)` | Matrix multiplication |
-| `r` | reshape | `(shape a -- a')` | Reshape `a` to dimensions given by `shape` (a `[1×2]` tensor) |
+| `$` | mask | `(m a b -- r)` | Element-wise conditional: `r[i] = m[i] ? a[i] : b[i]` (m must be boolean) |
+| `@` | matmul | `(a b -- a@b)` | Matrix multiplication; both operands must be 2D (rows ≥ 2) |
+| `r` | reshape | `(shape a -- a')` | Reshape `a` to dimensions given by `shape` (a `[1×1]` or `[1×2]` tensor) |
 | `S` | sum | `(a -- s)` | Sum all elements, push result as `[1×1]` tensor |
-| `.` | dot product | `(a b -- d)` | Dot product of two flat tensors, push result as `[1×1]` tensor |
+| `.` | dot product | `(a b -- d)` | Dot product of two row vectors, push result as `[1×1]` tensor |
 
 ---
 
 ### Shape rules
 
 - Binary element-wise operations (`+`, `-`, `*`, `>`, `<`, `=`, `&`, `|`, `$`) require both operands to have identical shapes.
-- `@` requires `a.cols == b.rows`.
+- `@` requires `a.cols == b.rows` and both operands must be proper matrices (rows ≥ 2).
 - `r` requires the total number of elements to be preserved: `new_rows * new_cols == old_rows * old_cols`.
-- The `shape` operand for `r` must be a `[1×2]` tensor where `shape[0]` is the new row count and `shape[1]` is the new column count.
+- The `shape` operand for `r` is a `[1×1]` tensor (sets columns, keeps rows=1) or a `[1×2]` tensor `[rows cols]`.
+- Boolean operations (`&`, `|`, `!`, `$`) require all elements to be exactly `0.0` or `1.0`.
 
 ---
 
@@ -75,31 +85,30 @@ To create a matrix, use `r` (reshape) after creating a flat tensor.
 
 **Create and print a vector:**
 ```
-[ 1 2 3 4 ] p
+[ 1.0 2.0 3.0 4.0 ] p
 ```
 
 **Element-wise operations:**
 ```
-[ 1 2 3 ] [ 4 5 6 ] + p
+[ 1.0 2.0 3.0 ] [ 4.0 5.0 6.0 ] + p
 ```
 
 **Reshape and matrix multiply:**
 ```
-[ 1 2 3 4 5 6 ] [ 2 3 ] r
-[ 1 0 0 0 1 0 0 0 1 ] [ 3 3 ] r
+[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r
+[ 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0 ] [ 3.0 3.0 ] r
 @ P
 ```
 
-**Boolean masking:**
+**Boolean masking (select elements from two tensors):**
 ```
-[ 1 -2 3 -4 ] d [ 0 1 0 1 ] r
-[ 0 0 0 0 ] $
-p
+[ 40.0 50.0 60.0 ] [ 10.0 20.0 30.0 ] [ 1.0 0.0 1.0 ] $ p
 ```
+Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, takes from `b`.
 
 **Sum reduction:**
 ```
-[ 1 2 3 4 5 ] S p
+[ 1.0 2.0 3.0 4.0 5.0 ] S p
 ```
 
 ---
@@ -108,15 +117,23 @@ p
 
 ### Memory management
 
-Stack values are heap-allocated `array_instance` structs with a `ref_count` field. The `d` (duplicate) opcode increments the reference count instead of copying data; `stack_pop` decrements it and frees when the count reaches zero. This avoids unnecessary allocations for operations like `d ... p`.
+Stack values are heap-allocated `array_instance` structs with a `ref_count` field. The `d` (duplicate) opcode increments the reference count instead of copying data; `instance_free` decrements it and frees when the count reaches zero. This avoids unnecessary allocations for operations like `d ... p`.
 
 ### Matrix multiplication
 
-The `@` operator uses a blocked algorithm (16 × 16 × 16 tiles) with an explicit transpose of the right-hand operand to ensure sequential memory access. The outer loops are parallelized with OpenMP (`#pragma omp parallel for collapse(2)`).
+The `@` operator transposes the right-hand operand (`b`) for cache-friendly sequential access, then uses a blocked algorithm (16×16×16 tiles). The outer loops are parallelized with OpenMP (`#pragma omp parallel for collapse(2)`).
+
+### Stack resizing
+
+The stack doubles capacity when full and halves when usage drops below 25% of capacity. The 25% threshold avoids thrashing on push/pop sequences near the resize boundary.
 
 ### Layout
 
 All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N` columns is at `data[i * N + j]`.
+
+### Array literal parsing
+
+`parse_array` uses two passes: the first validates strict syntax and counts elements; the second allocates a single block and fills it. This avoids `realloc` churn and ensures memory is allocated exactly once per literal.
 
 ---
 
@@ -129,6 +146,7 @@ All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N
 ├── stack.c / stack.h         # Dynamic stack with reference-counted tensor values
 ├── reader.c / reader.h       # File I/O utilities
 ├── Makefile
+├── run_tests.sh              # Test suite (40 tests)
 ├── example.tensorforth
 └── random_matmul.tensorforth
 ```

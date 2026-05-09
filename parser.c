@@ -1,10 +1,11 @@
 #include "parser.h"
 #include "stack.h"
+#include <ctype.h>
 
 static dictionary table[] = {
 	{"[", OP_NEW_ARRAY},
 	{"p", OP_PRINT_N_POP},
-	{"P", OP_PRINT_MATRIX}, // ormai lavevo scritta la mappo con P
+	{"P", OP_PRINT_MATRIX},
 	{"d", OP_DUPLICATE},
 	{"+", OP_ADD},
 	{"-", OP_SUBTRACTION},
@@ -28,7 +29,6 @@ static dictionary table[] = {
 /* Looks up a token string in the command table.
  * Input: token — single-character null-terminated string.
  * Output: the corresponding OpCode, or OP_UNKNOWN if not found. */
-// perf: const on token — communicates read-only intent, enables compiler alias analysis
 OpCode lookup(const char *token){
 	int n = sizeof(table)/sizeof(table[0]);
 	for (int i = 0; i < n; i++){
@@ -41,52 +41,66 @@ OpCode lookup(const char *token){
 /* Parses a 1D float array literal starting after '[' at s[offset].
  * Reads floats until ']' is found, allocates the array and pushes it on the stack.
  * Input: s — full script string, offset — index of first char after '[', my_stack — destination stack.
- * Output: number of characters consumed (including ']'), or -1 on error.
- * Previously: two passes — first counted elements (malloc once), then re-read to fill.
- * Now: single pass with realloc at each element; slower on large arrays but simpler. */
-// perf: const on s — communicates read-only intent, enables compiler alias analysis
+ * Output: number of characters consumed (including ']'), or -1 on error. */
 long parse_array(const char *s, long offset, stack *my_stack){
 	long start = offset;
-	int count = 0;       /* elementi: mai > INT_MAX in pratica */
-	float *new_array = NULL;
-	int consumati = 0;   /* %n di sscanf scrive sempre in int */
+	int count = 0;
+	int consumati = 0;
+	long tmp = offset;
 
-	if (s[offset] != ' ') {
+	/* prima passata: valida la sintassi e conta gli elementi */
+	if (s[tmp] != ' ') {
 		fprintf(stderr, "errore: manca lo spazio obbligatorio dopo '['\n");
 		return -1;
 	}
-	offset++;  // salta lo spazio obbligatorio dopo '['
+	tmp++;
 
-	while (s[offset] != '\0' && s[offset] != ']') {
+	while (s[tmp] != '\0' && s[tmp] != ']') {
+		if (s[tmp] == ' ') {
+			fprintf(stderr, "errore: spazio doppio alla posizione %ld\n", tmp - start);
+			return -1;
+		}
 		float val;
-		if (sscanf(s + offset, "%f%n", &val, &consumati) == 1) {
-			if (s[offset + consumati] != ' ') {
-				if (s[offset + consumati] == ']')
+		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) {
+			if (s[tmp + consumati] != ' ') {
+				if (s[tmp + consumati] == ']')
 					fprintf(stderr, "errore: manca lo spazio obbligatorio prima di ']'\n");
 				else
 					fprintf(stderr, "errore: manca lo spazio dopo il valore %g\n", val);
-				free(new_array);
 				return -1;
 			}
-			float *tmp = realloc(new_array, sizeof(float) * (size_t)(count + 1));
-			if (tmp == NULL) {
-				free(new_array);
-				return -1;
-			}
-			new_array = tmp;
-			new_array[count] = val;
 			count++;
-			offset += consumati + 1;  // +1 = spazio obbligatorio dopo il float (verificato sopra)
+			tmp += consumati + 1;
 		} else {
-			fprintf(stderr, "errore valore inserito non è un float: %c, continua la lettura ignorando il carattere\n", s[offset]);
-			offset += 2;  // salta il char invalido + lo spazio dopo
+			if (isprint((unsigned char)s[tmp]))
+				fprintf(stderr, "errore: token non valido '%c' alla posizione %ld\n", s[tmp], tmp - start);
+			else
+				fprintf(stderr, "errore: token non valido '\\x%02x' alla posizione %ld\n", (unsigned char)s[tmp], tmp - start);
+			return -1;
 		}
 	}
 
-	if (s[offset] == '\0') {
-		fprintf(stderr, "errore di inserimento manca la chiusura ']' nella descrizione dell array\n");
-		free(new_array);
+	if (s[tmp] == '\0') {
+		fprintf(stderr, "errore: manca la chiusura ']'\n");
 		return -1;
+	}
+
+	long end = tmp;  /* posizione di ']' */
+
+	/* seconda passata: alloca una volta e riempie */
+	float *new_array = malloc(sizeof(float) * (size_t)count);
+	if (new_array == NULL) return -1;
+
+	offset++;  /* salta lo spazio iniziale dopo '[' */
+	for (int j = 0; j < count; j++) {
+		float val;
+		if (sscanf(s + offset, "%f%n", &val, &consumati) == 1) {
+			new_array[j] = val;
+			offset += consumati + 1;
+		} else {
+			free(new_array);
+			return -1;
+		}
 	}
 
 	coppia shape;
@@ -97,7 +111,7 @@ long parse_array(const char *s, long offset, stack *my_stack){
 		free(new_array);
 		return -1;
 	}
-	return offset - start + 1;
+	return end - start + 1;
 }
 
 /* Pops s (shape tensor: 1D, 1 or 2 elements) then a, reshapes a to the dimensions in s.
@@ -265,15 +279,12 @@ int disuguaglianze (stack *my_stack, char op) {
 			instance_free(b);
 			return -1;
 	}
-	// perf: hoisted a->shape.row, a->shape.col, a->data, b->data — avoids reload each iteration
 	int rows = a->shape.row;
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
 	float * restrict b_data = b->data;
-	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
-	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'M'){
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
@@ -320,7 +331,6 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 			instance_free(b);
 			return -1;
 	}
-	// perf: hoisted a->shape.row, a->shape.col, a->data, b->data — avoids reload each iteration
 	int rows = a->shape.row;
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
@@ -341,10 +351,8 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 			}
 		}
 	}
-	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
-	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'a'){
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
@@ -376,11 +384,9 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 int op_not (stack *my_stack){
 	array_instance *a = stack_pop(my_stack);
 	if (a == NULL) return -1;
-	// perf: hoisted a->shape.row, a->shape.col, a->data — avoids reload each iteration
 	int rows = a->shape.row;
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
-	// perf: restrict on new_data — guarantees no aliasing with a_data, enables auto-vectorisation
 	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
 	if (new_data == NULL) { instance_free(a); return -1; }
 	for (int i = 0; i < rows; i++){
@@ -434,9 +440,6 @@ int mask (stack *my_stack) {
 		return -1;
 	}
 
-	// non sono sicuro se "si assume che m sia booleano" intenda controllalo o non controllarlo io lo controllo nel caso a posteriori si puo commentare
-
-	// perf: hoisted m->shape.row, m->shape.col — avoids reload each iteration
 	int m_rows = m->shape.row;
 	int m_cols = m->shape.col;
 	for (int i = 0; i < m_rows; i++){
@@ -526,16 +529,17 @@ int mat_mat_mul(stack *my_stack){
 	int b_rows = b->shape.row;
 	int b_cols = b->shape.col;
 
-	if (a_cols != b_rows){
-		fprintf(stderr, "errore: shape incompatibili per prodotto matriciale a[%d %d] b[%d %d]\n",
+	if (a_rows < 2 || b_rows < 2) {
+		fprintf(stderr, "errore: @ richiede matrici 2D, non vettori (a[%d %d] b[%d %d])\n",
 			a_rows, a_cols, b_rows, b_cols);
 		instance_free(a);
 		instance_free(b);
 		return -1;
 	}
-	
-	if (a_cols <= 1) {
-		fprintf (stderr, " errore: le matrici devono essere bidimensionali");
+
+	if (a_cols != b_rows){
+		fprintf(stderr, "errore: shape incompatibili per prodotto matriciale a[%d %d] b[%d %d]\n",
+			a_rows, a_cols, b_rows, b_cols);
 		instance_free(a);
 		instance_free(b);
 		return -1;
@@ -633,16 +637,9 @@ int dot_product (stack *my_stack){
 
 
 
-// i/o
-
-// wip int immage_reader (stack *my_stack;)
-
-
-
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Input: s — null-terminated script string, my_stack — the execution stack.
  * Output: 0 on success, -1 on error. */
-// perf: const on s — communicates read-only intent, enables compiler alias analysis
 int parser(const char *s, stack *my_stack){
 	long size = (long)strlen(s);
 	for (long i = 0; i < size; i++){
