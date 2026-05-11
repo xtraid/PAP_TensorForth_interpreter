@@ -1,13 +1,7 @@
 #ifndef PARSER_
 #define PARSER_
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "stack.h"
-
-
 
 typedef enum {
 	//stack functions
@@ -35,16 +29,9 @@ typedef enum {
 	OP_UNKNOWN
 }OpCode;
 
-typedef struct{
-	char *nome;
-	OpCode op;	
-}dictionary;
- 
 OpCode lookup(const char *token);
 
 int parser(const char *s, stack *my_stack);
-
-long parse_array(const char *arr, long offset, stack *my_stack);
 
 int pop_print(stack *my_stack);
 

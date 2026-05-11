@@ -1,4 +1,3 @@
-#include "stack.h"
 #include "reader.h"
 #include "parser.h"
 

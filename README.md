@@ -144,7 +144,7 @@ All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N
 
 ### Binary tensor format
 
-Binary `.bin` files are read by `read_immage`. The file starts with a fixed-size header:
+Binary `.bin` files are read by `read_image`. The file starts with a fixed-size header:
 
 ```
 int32_t shape[MAX_DIM]   // shape[0]=rows, shape[1]=cols
@@ -167,6 +167,12 @@ Float data starts at `data_offset` and contains `rows * cols` IEEE 754 single-pr
 ├── reader.c / reader.h       # File I/O utilities
 ├── Makefile
 ├── run_tests.sh              # Test suite (40 tests)
-├── example.tensorforth
-└── random_matmul.tensorforth
+├── examples/                 # Sample .tensorforth scripts
+│   ├── example.tensorforth
+│   ├── random_matmul.tensorforth
+│   └── test_complex.tensorforth
+└── tests/                    # Test data files
+    ├── test_tensor.bin
+    ├── test_load.tensorforth
+    └── cray-2.pgm
 ```
