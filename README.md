@@ -70,16 +70,28 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `.` | dot product | `(a b -- d)` | Dot product of two row vectors, push result as `[1×1]` tensor |
 | `"…"` | push string | `( -- s)` | Push the filename literal `…` onto the stack as a string item |
 | `(` | load tensor | `(s -- a)` | Pop filename string, read binary `.bin` file, push resulting tensor |
+| `)` | save tensor | `(a s -- )` | Pop filename string and tensor, write PGM (P5) file; values clamped to `[0, 1]` then scaled to `[0, 255]` |
+| `?` | random | `(shape -- a)` | Pop shape tensor (`[1×1]` or `[1×2]`), push tensor filled with uniform random floats in `[0, 1)` |
+| `R` | relu | `(a -- relu(a))` | Element-wise ReLU: `max(0, x)` for each element |
+| `m` | min | `(a b -- min(a,b))` | Element-wise minimum of two tensors |
+| `M` | max | `(a b -- max(a,b))` | Element-wise maximum of two tensors |
+
+---
+
+### Separator rules
+
+Exactly one whitespace character must separate consecutive tokens. Leading and trailing whitespace is allowed; double spaces or missing spaces between tokens are fatal errors.
 
 ---
 
 ### Shape rules
 
-- Binary element-wise operations (`+`, `-`, `*`, `>`, `<`, `=`, `&`, `|`, `$`) require both operands to have identical shapes.
+- Binary element-wise operations (`+`, `-`, `*`, `>`, `<`, `=`, `&`, `|`, `$`, `m`, `M`) require both operands to have identical shapes.
 - `@` requires `a.cols == b.rows` and both operands must be proper matrices (rows ≥ 2).
 - `r` requires the total number of elements to be preserved: `new_rows * new_cols == old_rows * old_cols`.
 - The `shape` operand for `r` is a `[1×1]` tensor (sets columns, keeps rows=1) or a `[1×2]` tensor `[rows cols]`.
 - Boolean operations (`&`, `|`, `!`, `$`) require all elements to be exactly `0.0` or `1.0`.
+- `?` consumes a shape tensor with the same convention as `r`: `[n]` → `[1×n]`, `[rows cols]` → `[rows×cols]`.
 
 ---
 
@@ -116,6 +128,22 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 **Load a tensor from a binary file:**
 ```
 "tests/test_tensor.bin" ( p
+```
+
+**Generate a random 3×4 matrix and save as PGM:**
+```
+[ 3 4 ] ? "output.pgm" )
+```
+
+**ReLU on a vector:**
+```
+[ -2.0 -1.0 0.0 1.0 2.0 ] R p
+```
+
+**Element-wise min/max:**
+```
+[ 1.0 5.0 3.0 ] [ 4.0 2.0 6.0 ] m p
+[ 1.0 5.0 3.0 ] [ 4.0 2.0 6.0 ] M p
 ```
 
 ---
@@ -170,7 +198,10 @@ Float data starts at `data_offset` and contains `rows * cols` IEEE 754 single-pr
 ├── examples/                 # Sample .tensorforth scripts
 │   ├── example.tensorforth
 │   ├── random_matmul.tensorforth
-│   └── test_complex.tensorforth
+│   ├── test_complex.tensorforth
+│   ├── test_random.tensorforth       # random vector/matrix generation
+│   ├── test_random_image.tensorforth # generate and save PGM
+│   └── test_leak.tensorforth         # stress test for all opcodes
 └── tests/                    # Test data files
     ├── test_tensor.bin
     ├── test_load.tensorforth
