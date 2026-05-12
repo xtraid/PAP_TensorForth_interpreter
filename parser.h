@@ -25,6 +25,11 @@ typedef enum {
 	OP_DOT,
 	OP_READ_NAME,
 	OP_LOAD_TENSOR,
+	OP_SAVE_TENSOR,
+	OP_RANDOM,
+	OP_RELU,
+	OP_MIN,
+	OP_MAX,
 
 	OP_UNKNOWN
 }OpCode;
@@ -32,6 +37,12 @@ typedef enum {
 OpCode lookup(const char *token);
 
 int parser(const char *s, stack *my_stack);
+
+int random_array(stack *my_stack);
+
+int relu(stack *my_stack);
+
+int extrema(stack *my_stack, char op);
 
 int pop_print(stack *my_stack);
 

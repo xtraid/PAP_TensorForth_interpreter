@@ -24,7 +24,12 @@ static dictionary table[] = {
 	{"S", OP_SUM},
 	{".", OP_DOT},
 	{"\"", OP_READ_NAME},
-	{"(", OP_LOAD_TENSOR}
+	{"(", OP_LOAD_TENSOR},
+	{")", OP_SAVE_TENSOR},
+	{"?", OP_RANDOM},
+	{"R", OP_RELU},
+	{"m", OP_MIN},
+	{"M", OP_MAX}
 
 };
 
@@ -144,10 +149,13 @@ int op_reshape(stack *my_stack){
 		return -1;
 	}
 	instance_free(s);
-	a->shape.row = new_rows;
-	a->shape.col = new_cols;
-	if (stack_push_instance(my_stack, a) != 0){ instance_free(a); return -1; }
+	int n = new_rows * new_cols;
+	float *new_data = malloc(sizeof(float) * (size_t)n);
+	if (!new_data) { instance_free(a); return -1; }
+	memcpy(new_data, a->data, sizeof(float) * (size_t)n);
 	instance_free(a);
+	coppia shape = {new_rows, new_cols};
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
 
@@ -654,10 +662,7 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
         fprintf(stderr, "errore: stringa malformata\n");
         return -1;
     }
-    char *nome = malloc(strlen(buf) + 1);
-    if (!nome) return -1;
-    strcpy(nome, buf);
-    stack_push_string(my_stack, nome);
+    if (stack_push_string(my_stack, buf) != 0) return -1;
     return 1 + consumati;
 }
 
@@ -694,21 +699,170 @@ static int read_image(stack *my_stack) {
     for (int i = 0; i < n; i++)
         new_inst->data[i] = new_inst->data[i] / 255.0f;
 
-    stack_push_instance(my_stack, new_inst);
+    if (stack_push_instance(my_stack, new_inst) != 0) {
+        instance_free(new_inst);
+        fclose(f);
+        free(path);
+        return -1;
+    }
+    instance_free(new_inst);
     fclose(f);
     free(path);
     return 0;
 }
 
+int save_image(stack *my_stack) {
+	stack_item item = stack_pop_item(my_stack);
+	if (item.type != ITEM_STRING) return -1;
+	char *path = item.filename;
+
+	array_instance *a = stack_pop(my_stack);
+	if (!a) { free(path); return -1; }
+
+	FILE *f = fopen(path, "wb");
+	if (!f) { perror("fopen"); free(path); instance_free(a); return -1; }
+
+	if (fprintf(f, "P5\n%d %d\n255\n", a->shape.row, a->shape.col) < 0) {
+		perror("fprintf"); fclose(f); free(path); instance_free(a); return -1;
+	}
+
+	int n = a->shape.row * a->shape.col;
+	uint8_t *buf = malloc((size_t)n);
+	if (!buf) { fclose(f); free(path); instance_free(a); return -1; }
+	for (int i = 0; i < n; i++) {
+		float dato = a->data[i];
+		int leq = (dato < 0.0f);
+		int geq = (dato > 1.0f);
+		dato = (float)geq + dato * (1 - leq) * (1 - geq);
+		buf[i] = (uint8_t)(dato * 255.0f);
+	}
+
+	if ((int)fwrite(buf, sizeof(uint8_t), (size_t)n, f) != n) {
+		perror("fwrite"); free(buf); fclose(f); free(path); instance_free(a); return -1;
+	}
+
+	free(buf);
+	fclose(f);
+	free(path);
+	instance_free(a);
+	return 0;
+}
+int random_array(stack *my_stack) {
+	array_instance *s = stack_pop(my_stack);
+	if (!s) return -1;
+	int row, col;
+	if (s->shape.row == 1 && s->shape.col == 2) {
+		row = (int)s->data[0];
+		col = (int)s->data[1];
+	} else if (s->shape.row == 1 && s->shape.col == 1) {
+		row = 1;
+		col = (int)s->data[0];
+	} else {
+		fprintf(stderr, "errore: shape deve essere 1D di 1 o 2 elementi\n");
+		instance_free(s);
+		return -1;
+	}
+	instance_free(s);
+	int n = row * col;
+	float *arr = malloc(sizeof(float) * (size_t)n);
+	if (!arr) { perror("malloc"); return -1; }
+	for (int i = 0; i < n; i++)
+		arr[i] = (float)rand() / (float)RAND_MAX;
+	coppia shape = {row, col};
+	if (stack_push(my_stack, arr, shape) != 0) { free(arr); return -1; }
+	return 0;
+}
 
 
+int relu (stack *my_stack){
+	array_instance *a = stack_pop(my_stack);
+	if (!a) return -1;
+	int n = a->shape.row * a->shape.col;
+	float *new_data = malloc(sizeof(float) * (size_t)n);
+	if (!new_data) { instance_free(a); return -1; }
+	for (int i = 0; i < n; i++)
+		new_data[i] = (a->data[i] > 0.f) ? a->data[i] : 0.f;
+	coppia shape;
+	shape.row = a->shape.row;
+	shape.col = a->shape.col;
+	int err = stack_push(my_stack, new_data,shape);
+	if(err != 0){
+		free(new_data);
+		instance_free(a);
+		return err;
+	}
+	instance_free(a);
+	return 0;
+}
+
+
+int extrema(stack *my_stack, char op){ // 'm'=min, 'M'=max
+	array_instance *a = stack_pop(my_stack);
+	if (a == NULL) return -1;
+	array_instance *b = stack_pop(my_stack);
+	if (b == NULL) { instance_free(a); return -1; }
+	if (a->shape.row != b->shape.row || a->shape.col != b->shape.col){
+		fprintf(stderr, "errore: shape incompatibili [%d %d] != [%d %d]\n", a->shape.row, a->shape.col, b->shape.row, b->shape.col);
+		instance_free(a);
+		instance_free(b);
+		return -1;
+	}
+	int row = a->shape.row;
+	int col = a->shape.col;
+	int n = row * col;
+	float *new_data = malloc(sizeof(float) * (size_t)n);
+	if (!new_data) { instance_free(a); instance_free(b); return -1; }
+	if (op == 'm'){
+		for (int i = 0; i < n; i++){
+			int cond = (a->data[i] < b->data[i]);
+			new_data[i] = a->data[i] * cond + b->data[i] * (1 - cond);
+		}
+	} else {
+		for (int i = 0; i < n; i++){
+			int cond = (a->data[i] > b->data[i]);
+			new_data[i] = a->data[i] * cond + b->data[i] * (1 - cond);
+		}
+	}
+	instance_free(a);
+	instance_free(b);
+	coppia shape = {row, col};
+	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
+	return 0;
+}
 
 /* Main interpreter loop. Scans s token by token and dispatches each command.
+ * Enforces exactly one whitespace separator between consecutive tokens.
  * Input: s — null-terminated script string, my_stack — the execution stack.
  * Output: 0 on success, -1 on error. */
 int parser(const char *s, stack *my_stack){
 	long size = (long)strlen(s);
+
+	/* strip trailing whitespace so trailing newlines are never an error */
+	while (size > 0 && (s[size-1] == ' ' || s[size-1] == '\n' ||
+	                    s[size-1] == '\t' || s[size-1] == '\r'))
+		size--;
+
+	/* BEFORE_FIRST=0: leading spaces OK; NEED_SEP=1: must see one space;
+	 * SEP_DONE=2: space consumed, next char must be a token */
+	int sep_state = 0;
+
 	for (long i = 0; i < size; i++){
+		int is_ws = (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r');
+
+		if (is_ws) {
+			if      (sep_state == 1) sep_state = 2;
+			else if (sep_state == 2) {
+				fprintf(stderr, "errore: spazio extra alla posizione %ld\n", i);
+				return -1;
+			}
+			continue;
+		}
+
+		if (sep_state == 1) {
+			fprintf(stderr, "errore: manca spazio tra i token alla posizione %ld\n", i);
+			return -1;
+		}
+
 		char token[2] = {s[i], '\0'};
  		switch(lookup(token)){
 
@@ -759,15 +913,17 @@ int parser(const char *s, stack *my_stack){
 				break;}
 
 			case OP_LOAD_TENSOR: if (read_image(my_stack) != 0) return -1; break;
+			case OP_SAVE_TENSOR: if (save_image(my_stack) != 0) return -1; break;
+			case OP_RANDOM: if (random_array(my_stack) != 0) return -1; break;
+			case OP_RELU: if (relu(my_stack) != 0) return -1; break;
+			case OP_MIN: if (extrema(my_stack, 'm') != 0) return -1; break;
+			case OP_MAX: if (extrema(my_stack, 'M') != 0) return -1; break;
 
 			default:
-				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
-					fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
-				break;
-			
-
-
+				fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
+				return -1;
 		}
+		sep_state = 1;
 	}
 
 	return 0;
