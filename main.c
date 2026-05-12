@@ -12,6 +12,7 @@ int main (int argc, char *argv[]){
 	}
 	char *script = get_command(f);
 	fclose(f);
+	if (script == NULL) return 1;
 	stack *my_stack = stack_init();
 	int err = parser(script, my_stack);
 	free(script);

@@ -1,7 +1,15 @@
 #ifndef PARSER_
 #define PARSER_
 
+#include <stdint.h>
+#include <sys/types.h>
 #include "stack.h"
+
+typedef struct {
+	int32_t shape[MAX_DIM];
+	int32_t ndim;
+	off_t   data_offset;
+} on_disk_tensor;
 
 typedef enum {
 	//stack functions
@@ -25,6 +33,9 @@ typedef enum {
 	OP_DOT,
 	OP_READ_NAME,
 	OP_LOAD_TENSOR,
+	OP_SAVE_TENSOR,
+	OP_LOAD_MMAP,
+	OP_SAVE_MMAP,
 
 	OP_UNKNOWN
 }OpCode;
@@ -32,6 +43,16 @@ typedef enum {
 OpCode lookup(const char *token);
 
 int parser(const char *s, stack *my_stack);
+
+long parse_array(const char *s, long offset, stack *my_stack);
+
+long parse_string(const char *s, long offset, stack *my_stack);
+
+int read_image(stack *my_stack, char op);
+
+int load_mmap(stack *my_stack);
+
+int save_mmap(stack *my_stack);
 
 int pop_print(stack *my_stack);
 

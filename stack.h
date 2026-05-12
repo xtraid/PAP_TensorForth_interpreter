@@ -25,7 +25,6 @@ typedef struct {
 	int32_t col;
 } coppia;
 
-	
 struct array_instance {
 	float *data;
 	coppia shape;
@@ -50,6 +49,7 @@ array_instance *new_instance (float *data, coppia shape);
 void instance_free (array_instance *i);
 int stack_push_string(stack *s, const char *filename);
 stack_item stack_pop_item(stack *s);
+void stack_item_free(stack_item item);
 
 
 #endif 

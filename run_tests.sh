@@ -243,6 +243,38 @@ run_test "dot product su matrici 2D" \
     ""
 
 echo ""
+echo "=== TEST I/O FILE ================================================="
+
+TMPBIN=$(mktemp /tmp/tf_test_XXXXXX.bin)
+
+run_test "write e read roundtrip valori estremi" \
+    pass \
+    "[ 1.0 0.0 ] \"${TMPBIN}\" ) \"${TMPBIN}\" ( p" \
+    "1.000000 0.000000"
+
+run_test "write clamp valori fuori range, roundtrip" \
+    pass \
+    "[ 2.0 -1.0 ] \"${TMPBIN}\" ) \"${TMPBIN}\" ( p" \
+    "1.000000 0.000000"
+
+run_test "write matrice 2x2, roundtrip shape" \
+    pass \
+    "[ 1.0 0.0 0.0 1.0 ] [ 2.0 2.0 ] r \"${TMPBIN}\" ) \"${TMPBIN}\" ( p" \
+    "shape=[2 2]"
+
+run_test "write senza tensore sullo stack" \
+    fail \
+    "\"${TMPBIN}\" )" \
+    ""
+
+run_test "write senza stringa sullo stack" \
+    fail \
+    "[ 1.0 2.0 ] )" \
+    ""
+
+rm -f "${TMPBIN}"
+
+echo ""
 echo "=================================================================="
 echo "Risultato: ${PASS} PASS, ${FAIL} FAIL su $((PASS+FAIL)) test totali"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

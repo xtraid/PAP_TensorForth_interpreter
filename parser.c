@@ -1,6 +1,8 @@
 #include "parser.h"
+#include "netpbm.h"
 #include <ctype.h>
-#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 typedef struct { char *nome; OpCode op; } dictionary;
 
@@ -24,7 +26,10 @@ static dictionary table[] = {
 	{"S", OP_SUM},
 	{".", OP_DOT},
 	{"\"", OP_READ_NAME},
-	{"(", OP_LOAD_TENSOR}
+	{"(", OP_LOAD_TENSOR},
+	{")", OP_SAVE_TENSOR},
+	{"{", OP_LOAD_MMAP},
+	{"}", OP_SAVE_MMAP}
 
 };
 
@@ -46,7 +51,7 @@ OpCode lookup(const char *token){
  * Reads floats until ']' is found, allocates the array and pushes it on the stack.
  * Input: s — full script string, offset — index of first char after '[', my_stack — destination stack.
  * Output: number of characters consumed (including ']'), or -1 on error. */
-static long parse_array(const char *s, long offset, stack *my_stack){
+long parse_array(const char *s, long offset, stack *my_stack){
 	long start = offset;
 	int count = 0;
 	int consumati = 0;
@@ -65,7 +70,7 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 			return -1;
 		}
 		float val;
-		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) {
+		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) { //magia nera
 			if (s[tmp + consumati] != ' ') {
 				if (s[tmp + consumati] == ']')
 					fprintf(stderr, "errore: manca lo spazio obbligatorio prima di ']'\n");
@@ -646,7 +651,7 @@ int dot_product (stack *my_stack){
  * Reads until the closing '"', allocates a copy and pushes it on the stack.
  * Input: s — full script string, offset — index of first char after '"', my_stack — destination stack.
  * Output: number of characters consumed (including closing '"'), or -1 on error. */
-static long parse_string(const char *s, long offset, stack *my_stack) {
+long parse_string(const char *s, long offset, stack *my_stack) {
     int consumati = 0;
     char buf[256];
     sscanf(s + offset, "%255[^\"]%n", buf, &consumati);
@@ -662,46 +667,141 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
 }
 
 
-static int read_image(stack *my_stack) {
+int read_image(stack *my_stack, char op) {
+    (void)op;
     stack_item item = stack_pop_item(my_stack);
-    if (item.type != ITEM_STRING) return -1;
-    char *path = item.filename;
+    if (item.type != ITEM_STRING) { stack_item_free(item); return -1; }
 
-    FILE *f = fopen(path, "rb");
-    if (!f) { perror("fopen"); free(path); return -1; }
-
-    struct { int32_t shape[MAX_DIM]; int32_t ndim; off_t data_offset; } header;
-    if (fread(&header, sizeof(header), 1, f) != 1) { fclose(f); free(path); return -1; }
-
-    int32_t row = header.shape[0];
-    int32_t col = (header.ndim == 1) ? 1 : header.shape[1];
-    off_t offset = header.data_offset;
-
-    fseek(f, (long)offset, SEEK_SET);
-
-    float *new_data = malloc(sizeof(float) * (size_t)(row * col));
-    if (!new_data) { perror("malloc"); fclose(f); free(path); return -1; }
-
-    if (fread(new_data, sizeof(float), (size_t)(row * col), f) != (size_t)(row * col)) {
-        free(new_data); fclose(f); free(path); return -1;
+    netpbm img;
+    int err = open_image(item.filename, &img);
+    free(item.filename);
+    if (err != 0) {
+        fprintf(stderr, "errore: apertura PGM fallita (%d)\n", err);
+        return -1;
     }
 
-    coppia doppia = { .row = row, .col = col };
-    array_instance *new_inst = new_instance(new_data, doppia);
-    if (!new_inst) { free(new_data); fclose(f); free(path); return -1; }
+    int n = img.width * img.height;
+    float *data = malloc(sizeof(float) * (size_t)n);
+    if (!data) { close_image(&img); return -1; }
 
-    int n = row * col;
     for (int i = 0; i < n; i++)
-        new_inst->data[i] = new_inst->data[i] / 255.0f;
+        data[i] = (unsigned char)img.data[img.offset + i] / 255.0f;
 
-    stack_push_instance(my_stack, new_inst);
-    fclose(f);
-    free(path);
+    close_image(&img);
+
+    coppia shape = { .row = img.height, .col = img.width };
+    if (stack_push(my_stack, data, shape) != 0) { free(data); return -1; }
+    return 0;
+}
+
+int write_immage(stack *my_stack) {
+    stack_item item = stack_pop_item(my_stack);
+    if (item.type != ITEM_STRING) { stack_item_free(item); return -1; }
+
+    array_instance *a = stack_pop(my_stack);
+    if (a == NULL) { free(item.filename); return -1; }
+
+    netpbm img;
+    int err = empty_image(item.filename, &img, a->shape.col, a->shape.row);
+    free(item.filename);
+    if (err != 0) {
+        fprintf(stderr, "errore: creazione PGM fallita (%d)\n", err);
+        instance_free(a); return -1;
+    }
+
+    int n = a->shape.row * a->shape.col;
+    for (int i = 0; i < n; i++) {
+        float v = a->data[i];
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        img.data[img.offset + i] = (char)(unsigned char)(v * 255.0f + 0.5f);
+    }
+
+    close_image(&img);
+    instance_free(a);
     return 0;
 }
 
 
+/* load_mmap: reads a binary on_disk_tensor file via mmap.
+ * No data copy: array_instance->data points directly into the mmap'd region.
+ * Input: my_stack with filename string on top.
+ * Output: 0 on success, -1 on error. */
+int load_mmap(stack *my_stack) {
+    stack_item item = stack_pop_item(my_stack);
+    if (item.type != ITEM_STRING) { stack_item_free(item); return -1; }
 
+    FILE *f = fopen(item.filename, "rb");
+    if (!f) { perror("fopen"); free(item.filename); return -1; }
+    free(item.filename);
+
+    on_disk_tensor header;
+    if (fread(&header, sizeof(header), 1, f) != 1) {
+        fprintf(stderr, "errore: lettura header fallita\n");
+        fclose(f); return -1;
+    }
+
+    struct stat sbuf;
+    fstat(fileno(f), &sbuf);
+    size_t file_size = (size_t)sbuf.st_size;
+
+    char *base = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fileno(f), 0);
+    fclose(f);
+    if (base == MAP_FAILED) { perror("mmap"); return -1; }
+
+    int32_t row = header.shape[0];
+    int32_t col = (header.ndim == 1) ? 1 : header.shape[1];
+    coppia shape = { .row = row, .col = col };
+    float *floats = (float *)(base + header.data_offset);
+
+    array_instance *inst = new_instance(floats, shape);
+    if (!inst) { munmap(base, file_size); return -1; }
+    inst->on_disk     = 1;
+    inst->data_offset = (int32_t)header.data_offset;
+
+    if (stack_push_instance(my_stack, inst) != 0) {
+        instance_free(inst);
+        return -1;
+    }
+    instance_free(inst);
+    return 0;
+}
+
+/* save_mmap: writes a tensor to a binary file with on_disk_tensor header.
+ * Pops filename string then tensor from stack; data written as raw floats.
+ * Input: my_stack with tensor under filename string on top.
+ * Output: 0 on success, -1 on error. */
+int save_mmap(stack *my_stack) {
+    stack_item item = stack_pop_item(my_stack);
+    if (item.type != ITEM_STRING) { stack_item_free(item); return -1; }
+
+    FILE *f = fopen(item.filename, "wb");
+    if (!f) { perror("fopen"); stack_item_free(item); return -1; }
+    free(item.filename);
+
+    array_instance *a = stack_pop(my_stack);
+    if (!a) { fclose(f); return -1; }
+
+    on_disk_tensor header;
+    header.shape[0]   = a->shape.row;
+    header.shape[1]   = a->shape.col;
+    header.ndim       = (a->shape.row == 1) ? 1 : 2;
+    header.data_offset = 64;
+
+    if (fwrite(&header, sizeof(header), 1, f) != 1 ||
+        fseek(f, 64, SEEK_SET) != 0) {
+        fclose(f); instance_free(a); return -1;
+    }
+
+    int n = a->shape.row * a->shape.col;
+    if ((int)fwrite(a->data, sizeof(float), (size_t)n, f) != n) {
+        fclose(f); instance_free(a); return -1;
+    }
+
+    fclose(f);
+    instance_free(a);
+    return 0;
+}
 
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Input: s — null-terminated script string, my_stack — the execution stack.
@@ -758,7 +858,10 @@ int parser(const char *s, stack *my_stack){
 					i += result;
 				break;}
 
-			case OP_LOAD_TENSOR: if (read_image(my_stack) != 0) return -1; break;
+			case OP_LOAD_TENSOR: if (read_image(my_stack, 'f') != 0) return -1; break;
+			case OP_SAVE_TENSOR: if (write_immage(my_stack) != 0) return -1; break;
+			case OP_LOAD_MMAP:   if (load_mmap(my_stack) != 0) return -1; break;
+			case OP_SAVE_MMAP:   if (save_mmap(my_stack) != 0) return -1; break;
 
 			default:
 				if (s[i] != ' ' && s[i] != '\n' && s[i] != '\t' && s[i] != '\r')
