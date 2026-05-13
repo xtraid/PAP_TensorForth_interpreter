@@ -2,6 +2,8 @@
 #include <ctype.h>
 #include <sys/types.h>
 
+#define BLOCK_SIZE 64
+
 typedef struct { char *nome; OpCode op; } dictionary;
 
 static dictionary table[] = {
@@ -24,8 +26,8 @@ static dictionary table[] = {
 	{"S", OP_SUM},
 	{".", OP_DOT},
 	{"\"", OP_READ_NAME},
-	{"(", OP_LOAD_TENSOR},
-	{")", OP_SAVE_TENSOR},
+	{"(", OP_LOAD_PGM},
+	{")", OP_SAVE_PGM},
 	{"?", OP_RANDOM},
 	{"R", OP_RELU},
 	{"m", OP_MIN},
@@ -96,7 +98,9 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 
 	long end = tmp;  /* posizione di ']' */
 
-	/* seconda passata: alloca una volta e riempie */
+	/* seconda passata: alloca esattamente `count` elementi e riempie.
+	 * Il doppio scan è deliberato: la prima passata conta gli elementi per evitare
+	 * realloc su array di dimensione arbitraria. */
 	float *new_array = malloc(sizeof(float) * (size_t)count);
 	if (new_array == NULL) return -1;
 
@@ -211,12 +215,9 @@ int pop_print_as_matrix(stack *my_stack){
  * Does not allocate a new tensor — both stack entries point to the same instance.
  * Input: my_stack — the stack. */
 int duplicate (stack *my_stack){
-	array_instance *last = stack_pop(my_stack);
-	if (last == NULL) return -1;
-	if (stack_push_instance(my_stack, last) != 0) { instance_free(last); return -1; }
-	if (stack_push_instance(my_stack, last) != 0) { instance_free(last); return -1; }
-	instance_free(last);
-	return 0;
+	array_instance *top = stack_peek(my_stack);
+	if (top == NULL) return -1;
+	return stack_push_instance(my_stack, top);
 }
 
 /* Pops the top two tensors, applies element-wise op ('a'=add, 's'=subtract, 'p'=product),
@@ -347,36 +348,21 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
 	float * restrict b_data = b->data;
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			if (a_data[i * cols + j] != 0.f && a_data[i * cols + j] != 1.f) {
-				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del primo tensore è %f\n", i, j, a_data[i * cols + j]);
-				instance_free(a);
-				instance_free(b);
-				return -2;
-			}
-			if (b_data[i * cols + j] != 0.f && b_data[i * cols + j] != 1.f) {
-				fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del secondo tensore è %f\n", i, j, b_data[i * cols + j]);
-				instance_free(a);
-				instance_free(b);
-				return -2;
-			}
-		}
-	}
-	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	int n = rows * cols;
+	float * restrict new_data = calloc((size_t)n, sizeof(float));
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
-	if (op == 'a'){
-		for (int i = 0; i < rows; i++) {
-			for (int j = 0; j < cols; j++) {
-				new_data[i * cols + j] = a_data[i * cols + j] && b_data[i * cols + j];
-			}
+	for (int k = 0; k < n; k++) {
+		if (a_data[k] != 0.f && a_data[k] != 1.f) {
+			fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del primo tensore è %f\n", k / cols, k % cols, a_data[k]);
+			free(new_data); instance_free(a); instance_free(b);
+			return -2;
 		}
-	} else if(op == 'o'){
-		for (int i = 0; i < rows; i++) {
-			for (int j = 0; j < cols; j++) {
-				new_data[i * cols + j] = a_data[i * cols + j] || b_data[i * cols + j];
-			}
+		if (b_data[k] != 0.f && b_data[k] != 1.f) {
+			fprintf(stderr, "operazione logica non definita: elemento [%d, %d] del secondo tensore è %f\n", k / cols, k % cols, b_data[k]);
+			free(new_data); instance_free(a); instance_free(b);
+			return -2;
 		}
+		new_data[k] = (op == 'a') ? (float)(a_data[k] && b_data[k]) : (float)(a_data[k] || b_data[k]);
 	}
 	coppia shape;
 	shape.row = rows;
@@ -521,12 +507,21 @@ static void kernel(float *A, float *B_T, float *C,
  * Suddivide il lavoro in blocchi di dimensione s1×s2×s3 per migliorare la località di cache;
  * parallelizza i loop esterni con OpenMP. */
 static void blocked_multiply(float *A, float *B_T, float *C, int a_rows, int a_cols, int b_cols){
-	const int s1 = 64, s2 = 64, s3 = 64;
+	if (a_rows <= BLOCK_SIZE && a_cols <= BLOCK_SIZE && b_cols <= BLOCK_SIZE) {
+		for (int i = 0; i < a_rows; i++)
+			for (int j = 0; j < b_cols; j++) {
+				float sum = 0.0f;
+				for (int k = 0; k < a_cols; k++)
+					sum += A[i * a_cols + k] * B_T[j * a_cols + k];
+				C[i * b_cols + j] = sum;
+			}
+		return;
+	}
 	#pragma omp parallel for collapse(2) schedule(static)
-	for (int i = 0; i < a_rows; i += s1)
-		for (int j = 0; j < b_cols; j += s2)
-			for (int k = 0; k < a_cols; k += s3)
-				kernel(A, B_T, C, i, s1, j, s2, k, s3, a_rows, a_cols, b_cols);
+	for (int i = 0; i < a_rows; i += BLOCK_SIZE)
+		for (int j = 0; j < b_cols; j += BLOCK_SIZE)
+			for (int k = 0; k < a_cols; k += BLOCK_SIZE)
+				kernel(A, B_T, C, i, BLOCK_SIZE, j, BLOCK_SIZE, k, BLOCK_SIZE, a_rows, a_cols, b_cols);
 }
 
 /* Pops a (top) and b from the stack and pushes a@b (matrix product).
@@ -585,14 +580,13 @@ int sum_arr (stack *my_stack){
 	array_instance *arr = stack_pop(my_stack);
 	if (arr == NULL) return -1;
 	int n = arr->shape.row * arr->shape.col;
-	float *sum = malloc(sizeof(float));
-	if (sum == NULL) { instance_free(arr); return -1; }
-	sum[0] = 0;
-
+	float total = 0.0f;
 	for (int i = 0; i < n; i++)
-		sum[0] += arr->data[i];
-
+		total += arr->data[i];
 	instance_free(arr);
+	float *sum = malloc(sizeof(float));
+	if (sum == NULL) return -1;
+	sum[0] = total;
 
 	coppia shape;
 	shape.row = 1;
@@ -726,7 +720,7 @@ int save_image(stack *my_stack) {
 	FILE *f = fopen(path, "wb");
 	if (!f) { perror("fopen"); free(path); instance_free(a); return -1; }
 
-	if (fprintf(f, "P5\n%d %d\n255\n", a->shape.row, a->shape.col) < 0) {
+	if (fprintf(f, "P5\n%d %d\n255\n", a->shape.col, a->shape.row) < 0) {
 		perror("fprintf"); fclose(f); free(path); instance_free(a); return -1;
 	}
 
@@ -735,9 +729,9 @@ int save_image(stack *my_stack) {
 	if (!buf) { fclose(f); free(path); instance_free(a); return -1; }
 	for (int i = 0; i < n; i++) {
 		float dato = a->data[i];
-		int leq = (dato < 0.0f);
-		int geq = (dato > 1.0f);
-		dato = (float)geq + dato * (1 - leq) * (1 - geq);
+		float leq = (dato < 0.0f) ? 1.0f : 0.0f;
+		float geq = (dato > 1.0f) ? 1.0f : 0.0f;
+		dato = geq + dato * (1.0f - leq) * (1.0f - geq);
 		buf[i] = (uint8_t)(dato * 255.0f);
 	}
 
@@ -818,13 +812,15 @@ int extrema(stack *my_stack, char op){ // 'm'=min, 'M'=max
 	if (!new_data) { instance_free(a); instance_free(b); return -1; }
 	if (op == 'm'){
 		for (int i = 0; i < n; i++){
-			int cond = (a->data[i] < b->data[i]);
-			new_data[i] = a->data[i] * cond + b->data[i] * (1 - cond);
+			/* branchless select: evita branch misprediction su dati non ordinati */
+			float cond = (float)(a->data[i] < b->data[i]);
+			new_data[i] = a->data[i] * cond + b->data[i] * (1.0f - cond);
 		}
 	} else {
 		for (int i = 0; i < n; i++){
-			int cond = (a->data[i] > b->data[i]);
-			new_data[i] = a->data[i] * cond + b->data[i] * (1 - cond);
+			/* branchless select: evita branch misprediction su dati non ordinati */
+			float cond = (float)(a->data[i] > b->data[i]);
+			new_data[i] = a->data[i] * cond + b->data[i] * (1.0f - cond);
 		}
 	}
 	instance_free(a);
@@ -916,8 +912,8 @@ int parser(const char *s, stack *my_stack){
 					i += result;
 				break;}
 
-			case OP_LOAD_TENSOR: if (read_image(my_stack) != 0) return -1; break;
-			case OP_SAVE_TENSOR: if (save_image(my_stack) != 0) return -1; break;
+			case OP_LOAD_PGM: if (read_image(my_stack) != 0) return -1; break;
+			case OP_SAVE_PGM: if (save_image(my_stack) != 0) return -1; break;
 			case OP_RANDOM: if (random_array(my_stack) != 0) return -1; break;
 			case OP_RELU: if (relu(my_stack) != 0) return -1; break;
 			case OP_MIN: if (extrema(my_stack, 'm') != 0) return -1; break;

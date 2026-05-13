@@ -109,6 +109,18 @@ array_instance *stack_pop(stack *s){
 	
 	
 	
+/* Returns a pointer to the top tensor without removing it or changing ref_count.
+ * Returns NULL on underflow or if the top item is not a tensor. */
+array_instance *stack_peek(stack *s) {
+    if (s->top == 0) { fprintf(stderr, "stack underflow\n"); return NULL; }
+    stack_item *top = &s->stack[s->top - 1];
+    if (top->type != ITEM_TENSOR) {
+        fprintf(stderr, "errore: atteso tensore, trovato stringa\n");
+        return NULL;
+    }
+    return top->tensor;
+}
+
 /* Decrements ref_count and frees the instance if no references remain. */
 void instance_free (array_instance *i){
 	if (i == NULL) return;

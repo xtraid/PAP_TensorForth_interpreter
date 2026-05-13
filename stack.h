@@ -45,6 +45,7 @@ int stack_resize(stack *s);
 int stack_push(stack *s,float *arr, coppia shape);
 int stack_push_instance(stack *s, array_instance *inst);
 array_instance *stack_pop(stack *s);
+array_instance *stack_peek(stack *s);
 void stack_free(stack *s);
 array_instance *new_instance (float *data, coppia shape);
 void instance_free (array_instance *i);

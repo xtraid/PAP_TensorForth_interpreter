@@ -2,14 +2,14 @@ CC = gcc
 HEADERS = ${wildcard *.h}
 SRC = ${wildcard *.c}
 OBJ = ${SRC:.c=.o}
-DEBUG = F
-PERF = F
+DEBUG = 0
+PERF = 0
 
 BASE_FLAGS = -std=c17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes -fopenmp #most annoying warning possible so i can make it right
 
-ifeq "${DEBUG}" "TRUE"
+ifeq "${DEBUG}" "1"
 	CFLAGS = -O0 -g ${BASE_FLAGS}
-else ifeq "${PERF}" "TRUE"
+else ifeq "${PERF}" "1"
 	CFLAGS = -O3 -march=native -ffast-math -funroll-loops ${BASE_FLAGS}
 else
 	CFLAGS = -O3 -funroll-loops ${BASE_FLAGS}
