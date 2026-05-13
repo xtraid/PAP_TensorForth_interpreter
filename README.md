@@ -12,7 +12,8 @@ Requires `gcc` with C17 support and `OpenMP`.
 
 ```sh
 make              # optimized build (-O3)
-make DEBUG=TRUE   # debug build (-O0 -g)
+make DEBUG=1      # debug build (-O0 -g)
+make PERF=1       # performance build (-O3 -march=native -ffast-math -funroll-loops)
 make clean        # remove build artifacts
 ```
 
@@ -156,7 +157,7 @@ Stack values are heap-allocated `array_instance` structs with a `ref_count` fiel
 
 ### Matrix multiplication
 
-The `@` operator transposes the right-hand operand (`b`) for cache-friendly sequential access, then uses a blocked algorithm (16×16×16 tiles). The outer loops are parallelized with OpenMP (`#pragma omp parallel for collapse(2)`).
+The `@` operator transposes the right-hand operand (`b`) for cache-friendly sequential access, then dispatches based on size. If all three dimensions fit within `BLOCK_SIZE` (default 64), a simple triple loop is used directly with no boundary-check overhead. Otherwise a blocked algorithm (64×64×64 tiles) is used, with the outer loops parallelized via OpenMP (`#pragma omp parallel for collapse(2)`).
 
 ### Stack resizing
 
