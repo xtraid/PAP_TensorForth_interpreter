@@ -502,23 +502,27 @@ static void transpose(float *data, float *new_data, int rows, int cols){
 /* kernel e blocked_multiply ricevono B già trasposta (B_T shape [b_cols × a_cols]).
  * C[i][j] += A[i][k] * B_T[j][k]  =  C = A * B_originale
  * Entrambi gli accessi sono sequenziali in k -> cache friendly. */
-static void kernel(float *A, float *B_T, float *C, int x, int dx, int y, int dy, int z, int dz, int a_rows, int a_cols, int b_cols){
-
-	int mx = (x + dx > a_rows) ? a_rows : x + dx;
-	int my = (y + dy > b_cols) ? b_cols : y + dy;
-	int mz = (z + dz > a_cols) ? a_cols : z + dz;
-	for (int i = x; i < mx; i++)
-		for (int j = y; j < my; j++)
-			for (int k = z; k < mz; k++)
-				C[i * b_cols + j] += A[i * a_cols + k] * B_T[j * a_cols + k];
+static void kernel(float *A, float *B_T, float *C,
+                   int x, int s1, int y, int s2, int k, int s3,
+                   int a_rows, int a_cols, int b_cols){
+    int mx = x + s1 < a_rows ? x + s1 : a_rows;
+    int my = y + s2 < b_cols ? y + s2 : b_cols;
+    int mk = k + s3 < a_cols ? k + s3 : a_cols;
+    for (int i = x; i < mx; i++)
+        for (int j = y; j < my; j++) {
+            float sum = C[i * b_cols + j];
+            for (int kk = k; kk < mk; kk++)
+                sum += A[i * a_cols + kk] * B_T[j * a_cols + kk];
+            C[i * b_cols + j] = sum;
+        }
 }
 
 /* Multiplica A [a_rows × a_cols] per B_T [b_cols × a_cols] (già trasposta) e accumula in C [a_rows × b_cols].
  * Suddivide il lavoro in blocchi di dimensione s1×s2×s3 per migliorare la località di cache;
  * parallelizza i loop esterni con OpenMP. */
 static void blocked_multiply(float *A, float *B_T, float *C, int a_rows, int a_cols, int b_cols){
-	const int s1 = 16, s2 = 16, s3 = 16;
-	#pragma omp parallel for collapse(2) schedule(dynamic)
+	const int s1 = 64, s2 = 64, s3 = 64;
+	#pragma omp parallel for collapse(2) schedule(static)
 	for (int i = 0; i < a_rows; i += s1)
 		for (int j = 0; j < b_cols; j += s2)
 			for (int k = 0; k < a_cols; k += s3)

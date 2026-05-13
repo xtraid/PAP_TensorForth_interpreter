@@ -6,7 +6,7 @@ DEBUG = F
 ifeq "${DEBUG}" "TRUE"
 	CFLAGS = -O0 -g -std=c17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes -fopenmp #most annoying warning possible so i can make it right
 else
-	CFLAGS = -O3 -std=c17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes -fopenmp #most annoying warning possible so i can make it right
+	CFLAGS = -O3 -march=native -ffast-math -funroll-loops -std=c17 -Wall -Wextra -pedantic -Wshadow -Wconversion -Wstrict-prototypes -fopenmp #most annoying warning possible so i can make it right
 endif
 
 all:TensorForth
