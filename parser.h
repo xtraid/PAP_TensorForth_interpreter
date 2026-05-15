@@ -2,6 +2,16 @@
 #define PARSER_
 
 #include "stack.h"
+#include <stdint.h>
+#include <sys/types.h>
+
+
+
+typedef struct {
+	int32_t shape[MAX_DIM];
+	int32_t ndim;
+	off_t data_offset;
+} disk_header;
 
 typedef enum {
 	//stack functions
@@ -37,6 +47,8 @@ typedef enum {
 	OP_SHAPE,
 	OP_FILL,
 	OP_SAVE_DISK,
+	OP_LOAD_DISK,
+	OP_CONV,
 
 	OP_UNKNOWN
 }OpCode;
@@ -88,5 +100,7 @@ int op_shape(stack *my_stack);
 int fill(stack *my_stack);
 
 int on_disk_save(stack *my_stack);
+int on_disk_read(stack *my_stack);
+int op_conv(stack *my_stack);
 
 #endif

@@ -3,6 +3,13 @@ BINARY="./TensorForth"
 PASS=0
 FAIL=0
 
+# Uso: ./run_tests.sh [--valgrind]
+VALGRIND=""
+if [ "${1}" = "--valgrind" ]; then
+    VALGRIND="valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=definite,indirect --quiet"
+    echo ">>> Modalità valgrind attiva <<<"
+fi
+
 run_test() {
     local name="$1"
     local expect="$2"   # "pass" o "fail"
@@ -13,7 +20,7 @@ run_test() {
     tmpfile=$(mktemp /tmp/tf_test_XXXXXX.tensorforth)
     printf '%s' "$content" > "$tmpfile"
 
-    output=$("$BINARY" "$tmpfile" 2>&1)
+    output=$(${VALGRIND} "$BINARY" "$tmpfile" 2>&1)
     exit_code=$?
     rm -f "$tmpfile"
 
@@ -240,6 +247,153 @@ run_test "shape incompatibili su addizione" \
 run_test "dot product su matrici 2D" \
     fail \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r ." \
+    ""
+
+echo ""
+echo "=== TEST SWAP / OVER / DROP ======================================="
+
+run_test "swap inverte TOS e second" \
+    pass \
+    "[ 1.0 ] [ 2.0 ] s p p" \
+    "1.000000"
+
+run_test "over duplica second" \
+    pass \
+    "[ 1.0 ] [ 2.0 ] o p p p" \
+    "1.000000"
+
+run_test "drop elimina TOS" \
+    pass \
+    "[ 1.0 ] [ 2.0 ] D p" \
+    "1.000000"
+
+run_test "drop underflow" \
+    fail \
+    "D" \
+    ""
+
+echo ""
+echo "=== TEST RAVEL / SHAPE ==========================================="
+
+run_test "ravel 2D -> 1D" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r _ p" \
+    "Tensor(shape=[1 4]"
+
+run_test "ravel 1D rimane 1D" \
+    pass \
+    "[ 1.0 2.0 3.0 ] _ p" \
+    "Tensor(shape=[1 3]"
+
+run_test "shape di 1D" \
+    pass \
+    "[ 5.0 6.0 7.0 ] # p" \
+    "1.000000 3.000000"
+
+run_test "shape di 2D" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r # p" \
+    "2.000000 2.000000"
+
+echo ""
+echo "=== TEST FILL / RANDOM ==========================================="
+
+run_test "fill crea matrice ciclica" \
+    pass \
+    "[ 2.0 3.0 ] [ 1.0 2.0 ] f p" \
+    "1.000000 2.000000 1.000000 2.000000 1.000000 2.000000"
+
+run_test "fill 1D" \
+    pass \
+    "[ 4.0 ] [ 7.0 ] f p" \
+    "7.000000 7.000000 7.000000 7.000000"
+
+run_test "random shape 1D" \
+    pass \
+    "[ 5.0 ] ? p" \
+    "Tensor(shape=[1 5]"
+
+run_test "random shape 2D" \
+    pass \
+    "[ 3.0 4.0 ] ? p" \
+    "Tensor(shape=[3 4]"
+
+echo ""
+echo "=== TEST RELU / MIN / MAX ========================================="
+
+run_test "relu azzera negativi" \
+    pass \
+    "[ -1.0 2.0 -3.0 4.0 ] R p" \
+    "0.000000 2.000000 0.000000 4.000000"
+
+run_test "relu tutti positivi inalterati" \
+    pass \
+    "[ 1.0 2.0 3.0 ] R p" \
+    "1.000000 2.000000 3.000000"
+
+run_test "min element-wise" \
+    pass \
+    "[ 1.0 5.0 3.0 ] [ 4.0 2.0 3.0 ] m p" \
+    "1.000000 2.000000 3.000000"
+
+run_test "max element-wise" \
+    pass \
+    "[ 1.0 5.0 3.0 ] [ 4.0 2.0 3.0 ] M p" \
+    "4.000000 5.000000 3.000000"
+
+echo ""
+echo "=== TEST I/O DISCO (save + load roundtrip) ======================="
+
+TMPBIN=$(mktemp /tmp/tf_tensor_XXXXXX.bin)
+
+run_test "save tensore su disco" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] \"$TMPBIN\" }" \
+    ""
+
+run_test "load tensore da disco" \
+    pass \
+    "\"$TMPBIN\" { p" \
+    "1.000000 2.000000 3.000000 4.000000"
+
+run_test "roundtrip save+load 2D" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r \"$TMPBIN\" } \"$TMPBIN\" { p" \
+    "Tensor(shape=[2 2]"
+
+rm -f "$TMPBIN"
+
+run_test "load file inesistente" \
+    fail \
+    "\"/tmp/nonexistent_tf_xyz.bin\" {" \
+    ""
+
+echo ""
+echo "=== STRESS TEST =================================================="
+
+run_test "stress: matmul 100x100" \
+    pass \
+    "[ 100.0 100.0 ] ? [ 100.0 100.0 ] ? @ D" \
+    ""
+
+run_test "stress: 1000 dup+drop" \
+    pass \
+    "$(python3 -c "print('[ 1.0 ] ' + ' '.join(['d D'] * 1000) + ' D')")" \
+    ""
+
+run_test "stress: fill grande e sum" \
+    pass \
+    "[ 1000.0 1000.0 ] [ 1.0 ] f S p" \
+    "1000000.000000"
+
+run_test "stress: chain operazioni" \
+    pass \
+    "[ 100.0 ] ? [ 100.0 ] ? + [ 100.0 ] ? - [ 100.0 ] ? * S D" \
+    ""
+
+run_test "stress: save+load roundtrip grande" \
+    pass \
+    "$(TMPF=$(mktemp /tmp/tf_stress_XXXXXX.bin); echo "[ 1000.0 ] ? \"$TMPF\" } \"$TMPF\" { S p"; rm -f "$TMPF")" \
     ""
 
 echo ""

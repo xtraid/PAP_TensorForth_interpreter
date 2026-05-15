@@ -1,4 +1,5 @@
 #include "stack.h"
+#include <sys/mman.h>
  /* Initializes a stack with an initial capacity of 1.
   * Returns NULL and prints an error if any allocation fails. */
 stack* stack_init(void){
@@ -126,7 +127,12 @@ void instance_free (array_instance *i){
 	if (i == NULL) return;
 	i->ref_count--;
 	if (i->ref_count <= 0){
-		free(i->data);
+		if (i->on_disk) {
+			size_t mmap_size = (size_t)i->data_offset + (size_t)(i->shape.row * i->shape.col) * sizeof(float);
+			munmap((char *)i->data - i->data_offset, mmap_size);
+		} else {
+			free(i->data);
+		}
 		free(i);
 	}
 }
@@ -170,7 +176,7 @@ int stack_push_item(stack *s, stack_item item) {
 
 /* Pops and returns the top stack_item (tensor or string).
    * Caller must free item.filename if type == ITEM_STRING. */
-  stack_item stack_pop_item(stack *s) {
+stack_item stack_pop_item(stack *s) {
 	stack_item empty = {0};
 	if (s->top == 0) { 
 		fprintf(stderr, "stack underflow\n"); return empty;

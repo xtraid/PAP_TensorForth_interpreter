@@ -23,7 +23,8 @@ This produces a `TensorForth` executable.
 
 ```sh
 ./TensorForth <script.tensorforth>
-./run_tests.sh    # run the test suite (40 tests)
+./run_tests.sh            # run the test suite (65 tests)
+./run_tests.sh --valgrind # run with valgrind leak check
 ```
 
 ## Language Reference
@@ -82,7 +83,9 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `_` | ravel | `(a -- a')` | Flatten tensor to a 1D row vector: `[r×c] → [1×(r*c)]` |
 | `#` | shape | `(a -- s)` | Pop tensor, push its shape as a `[1×2]` tensor `[rows cols]` |
 | `f` | fill | `(v s -- r)` | Pop shape `s` and value tensor `v`, push new tensor of shape `s` filled by cycling `v`'s elements |
-| `}` | save disk | `(f a -- )` | Pop filename string `f` and tensor `a`, serialise to binary file (disk format) |
+| `}` | save disk | `(a f -- )` | Pop filename string `f` and tensor `a`, serialise to binary file (disk format) |
+| `{` | load disk | `(f -- a)` | Pop filename string `f`, map file into memory with `mmap` (no copy), push tensor |
+| `c` | convolve | `(a k -- r)` | 2D convolution of matrix `a` with kernel `k` (square, odd order), stride 1, zero-padding; result has same shape as `a` |
 
 ---
 
@@ -176,8 +179,22 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 **Save and reload a tensor from disk:**
 ```
 [ 1.0 2.0 3.0 ] "out.bin" }
-"out.bin" ( p
+"out.bin" { p
 ```
+
+**Image blur pipeline (512×512, ~126ms on -O0):**
+```
+[ 512.0 512.0 ] ? "img.bin" }
+"img.bin" { [ 5.0 5.0 ] [ 0.04 ] f c "blurred.pgm" )
+```
+
+Step-by-step:
+1. `[ 512.0 512.0 ] ?` — generate random 512×512 matrix (simulated grayscale image)
+2. `"img.bin" }` — serialise to binary tensor file on disk
+3. `"img.bin" {` — map file into memory via `mmap` (zero-copy read)
+4. `[ 5.0 5.0 ] [ 0.04 ] f` — build 5×5 uniform blur kernel (each weight = 0.04, sum = 1.0)
+5. `c` — apply 2D convolution with zero-padding; output same size as input
+6. `"blurred.pgm" )` — write result as PGM P5 greyscale image (values clamped to [0,1] → [0,255])
 
 ---
 
@@ -190,6 +207,14 @@ Stack values are heap-allocated `array_instance` structs with a `ref_count` fiel
 ### Matrix multiplication
 
 The `@` operator transposes the right-hand operand (`b`) for cache-friendly sequential access, then dispatches based on size. If all three dimensions fit within `BLOCK_SIZE` (default 64), a simple triple loop is used directly with no boundary-check overhead. Otherwise a blocked algorithm (64×64×64 tiles) is used, with the outer loops parallelized via OpenMP (`#pragma omp parallel for collapse(2)`).
+
+### mmap load (`{`)
+
+`{` maps the binary tensor file directly into the process address space with `mmap(PROT_READ, MAP_PRIVATE)` — no `malloc` or `fread` for the data. The `array_instance` holds a pointer into the mapped region; `instance_free` detects `on_disk == 1` and calls `munmap` instead of `free`, using `data_offset` stored in the instance to recover the original map base pointer.
+
+### 2D Convolution (`c`)
+
+`c` requires a square kernel of odd order (3×3, 5×5, …). It first allocates a zero-padded copy of the input (`padding`), then computes each output element as the dot product of the kernel with the corresponding window (`c_dot`). Output is written to a freshly allocated buffer — never in-place — so the operator is safe on mmap-backed tensors.
 
 ### Stack resizing
 
@@ -205,7 +230,7 @@ All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N
 
 ### Binary tensor format
 
-The disk format is used by both `(` (load) and `}` (save). Files start with a `disk_header` of fixed size, followed by float data at a fixed offset of 64 bytes:
+The disk format is used by `{` (load) and `}` (save). Files start with a `disk_header` of fixed size, followed by float data at a fixed offset of 64 bytes:
 
 ```
 int32_t shape[MAX_DIM]   // shape[0]=rows, shape[1]=cols
@@ -227,14 +252,15 @@ Float data starts at `data_offset` (byte 64) and contains `rows * cols` IEEE 754
 ├── stack.c / stack.h         # Dynamic stack with reference-counted tensor values
 ├── reader.c / reader.h       # File I/O utilities
 ├── Makefile
-├── run_tests.sh              # Test suite (40 tests)
+├── run_tests.sh              # Test suite (65 tests, supports --valgrind)
 ├── examples/                 # Sample .tensorforth scripts
 │   ├── example.tensorforth
 │   ├── random_matmul.tensorforth
 │   ├── test_complex.tensorforth
 │   ├── test_random.tensorforth       # random vector/matrix generation
 │   ├── test_random_image.tensorforth # generate and save PGM
-│   └── test_leak.tensorforth         # stress test for all opcodes
+│   ├── test_leak.tensorforth         # stress test for all opcodes
+│   └── conv_pipeline.tensorforth    # blur pipeline: random 512×512 → mmap → conv 5×5 → PGM
 └── tests/                    # Test data files
     ├── test_tensor.bin
     ├── test_load.tensorforth

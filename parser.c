@@ -1,6 +1,10 @@
 #include "parser.h"
 #include <ctype.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define BLOCK_SIZE 64
 
@@ -38,7 +42,9 @@ static dictionary table[] = {
 	{"_", OP_RAVEL},
 	{"#", OP_SHAPE},
 	{"f", OP_FILL},
-	{"}", OP_SAVE_DISK}
+	{"}", OP_SAVE_DISK},
+	{"{", OP_LOAD_DISK},
+	{"c", OP_CONV}
 
 };
 
@@ -652,6 +658,86 @@ int dot_product (stack *my_stack){
 	if (stack_push(my_stack, sum, shape) != 0) { free(sum); return -1; }
 	return 0;
 }
+float *padding(float *data, int row, int col, int pad_dim) {
+    int row_padded = row + (2 * pad_dim);
+    int col_padded = col + (2 * pad_dim);
+
+    float *new_data = calloc((size_t)(row_padded * col_padded), sizeof(float));
+    if (new_data == NULL) {
+        return NULL;
+    }
+
+    for (int r = 0; r < row; r++) {
+        memcpy(&new_data[(r + pad_dim) * col_padded + pad_dim],&data[r * col], sizeof(float) * (size_t)col);
+    }
+
+    return new_data;
+}
+
+float c_dot(float *window_start, float *k, int stride, int shape_k) {
+    float sum = 0.0f;
+    for (int r = 0; r < shape_k; r++) {
+        for (int c = 0; c < shape_k; c++) {
+            sum += window_start[r * stride + c] * k[r * shape_k + c];
+        }
+    }
+    return sum;
+}
+
+int convoluzione(stack *my_stack) {
+    array_instance *k = stack_pop(my_stack);
+    if (!k)
+        return -1;
+
+    if (k->shape.row < 2 || k->shape.col < 2) {
+        fprintf(stderr, "il kernel deve essere una matrice 2D\n");
+        instance_free(k);
+        return -1;
+    }
+
+    if (k->shape.col != k->shape.row || k->shape.col % 2 == 0) {
+        fprintf(stderr, "il kernel deve essere una matrice quadrata di ordine dispari\n");
+        instance_free(k);
+        return -1;
+    }
+
+    array_instance *a = stack_pop(my_stack);
+    if (!a) {
+        instance_free(k);
+        return -1;
+    }
+
+    int pad_dim = (k->shape.row - 1) / 2;
+    float *expanded_data = padding(a->data, a->shape.row, a->shape.col, pad_dim);
+    if (!expanded_data) {
+        instance_free(k);
+        instance_free(a);
+        return -1;
+    }
+
+    int col_padded = a->shape.col + 2 * pad_dim;
+    int shape_k = k->shape.row;
+    int a_rows = a->shape.row;
+    int a_cols = a->shape.col;
+
+    float *out = malloc(sizeof(float) * (size_t)(a_rows * a_cols));
+    if (!out) { free(expanded_data); instance_free(k); instance_free(a); return -1; }
+
+    for (int i = 0; i < a_rows; i++) {
+        for (int j = 0; j < a_cols; j++) {
+            float *window = &expanded_data[i * col_padded + j];
+            out[i * a_cols + j] = c_dot(window, k->data, col_padded, shape_k);
+        }
+    }
+
+    free(expanded_data);
+    instance_free(k);
+    instance_free(a);
+
+    coppia shape = {a_rows, a_cols};
+    if (stack_push(my_stack, out, shape) != 0) { free(out); return -1; }
+    return 0;
+}
 
 
 
@@ -676,6 +762,8 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
  * dividing by 255.0, and pushes the result on the stack.
  * Input: my_stack — the stack (top: filename string).
  * Output: 0 on success, -1 on error. */
+/* TODO: questa funzione legge il formato binario disk_header, non PGM P5.
+ * Va riscritta per leggere "P5\n width height\n255\n" + pixel uint8 → float/255. */
 static int read_image(stack *my_stack) {
     stack_item item = stack_pop_item(my_stack);
     if (item.type != ITEM_STRING) {
@@ -691,7 +779,7 @@ static int read_image(stack *my_stack) {
     if (fread(&header, sizeof(header), 1, f) != 1) { fclose(f); free(path); return -1; }
 
     int32_t row = header.shape[0];
-    int32_t col = (header.ndim == 1) ? 1 : header.shape[1];
+    int32_t col = header.shape[1];
     off_t offset = header.data_offset;
 
     fseek(f, (long)offset, SEEK_SET);
@@ -941,6 +1029,8 @@ int ravel(stack *my_stack) {
 /* Pops a tensor and pushes a 1D tensor [1×2] containing its shape [rows, cols].
  * Input: my_stack — the stack.
  * Output: 0 on success, -1 on error. */
+/* TODO: per tensori 1D (shape.row == 1) restituire [ n ] (1 elemento), non [ 1 n ].
+ * Attualmente restituisce sempre 2 elementi, rompendo ? r f quando usati dopo # su un 1D. */
 int op_shape(stack *my_stack) {
 	array_instance *a = stack_pop(my_stack);
 	if (!a) return -1;
@@ -998,18 +1088,12 @@ int fill(stack *my_stack) {
 }
 
 
-typedef struct {
-	int32_t shape[MAX_DIM];
-	int32_t ndim;
-	off_t data_offset;
-} disk_header;
-
 /* Pops a filename string and a tensor, serialises the tensor to a binary file.
  * Header (64 bytes): shape, ndim, data_offset. Float data starts at byte 64.
  * Input: my_stack — the stack (top: filename string, then tensor).
  * Output: 0 on success, -1 on argument error, -2 on I/O error. */
 int on_disk_save(stack *my_stack){
-	stack_item item = stack_item_pop(my_stack);
+	stack_item item = stack_pop_item(my_stack);
 	if (item.type != ITEM_STRING) {
 		fprintf(stderr, "errore: atteso un filename");
 		return -1;
@@ -1021,7 +1105,7 @@ int on_disk_save(stack *my_stack){
 		return -1;
 	}
 
-	disk_header header;
+	disk_header header = {0};
 	header.shape[0] = a->shape.row;
 	header.shape[1] = a->shape.col;
 	if (header.shape[0] == 1)
@@ -1068,6 +1152,50 @@ int on_disk_save(stack *my_stack){
 	
 }
 
+
+/* Pops a filename string, maps the binary tensor file into memory (read-only, no copy),
+ * and pushes the result on the stack. instance_free will munmap using on_disk and data_offset.
+ * Input: my_stack — the stack (top: filename string).
+ * Output: 0 on success, -1 on error. */
+int on_disk_read(stack *my_stack) {
+	stack_item item = stack_pop_item(my_stack);
+	if (item.type != ITEM_STRING) {
+		fprintf(stderr, "errore: atteso un filename\n");
+		return -1;
+	}
+	char *path = item.filename;
+
+	int f = open(path, O_RDONLY);
+	if (f < 0) { perror("open"); free(path); return -1; }
+
+	struct stat st;
+	if (fstat(f, &st) < 0) { perror("fstat"); close(f); free(path); return -1; }
+
+	disk_header hdr;
+	if (read(f, &hdr, sizeof(hdr)) != (ssize_t)sizeof(hdr)) {
+		perror("read"); close(f); free(path); return -1;
+	}
+
+	void *map = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, f, 0);
+	close(f);
+	if (map == MAP_FAILED) { perror("mmap"); free(path); return -1; }
+
+	float *src = (float *)((char *)map + hdr.data_offset);
+	coppia shape = { hdr.shape[0], hdr.shape[1] };
+	array_instance *inst = new_instance(src, shape);
+	if (!inst) { munmap(map, (size_t)st.st_size); free(path); return -1; }
+	inst->on_disk = 1;
+	inst->data_offset = (int32_t)hdr.data_offset;
+
+	if (stack_push_instance(my_stack, inst) != 0) {
+		instance_free(inst);
+		free(path);
+		return -1;
+	}
+	instance_free(inst);
+	free(path);
+	return 0;
+}
 
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Enforces exactly one whitespace separator between consecutive tokens.
@@ -1164,6 +1292,8 @@ int parser(const char *s, stack *my_stack){
 			case OP_SHAPE: if (op_shape(my_stack) != 0) return -1; break;
 			case OP_FILL: if (fill(my_stack) != 0) return -1; break;
 			case OP_SAVE_DISK: if (on_disk_save(my_stack) != 0) return -1; break;
+			case OP_LOAD_DISK: if (on_disk_read(my_stack) != 0) return -1; break;
+			case OP_CONV: if (convoluzione(my_stack) != 0) return -1; break;
 
 			default:
 				fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
