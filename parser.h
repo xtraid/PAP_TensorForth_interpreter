@@ -30,6 +30,13 @@ typedef enum {
 	OP_RELU,
 	OP_MIN,
 	OP_MAX,
+	OP_SWITCH,
+	OP_OVER,
+	OP_DROP,
+	OP_RAVEL,
+	OP_SHAPE,
+	OP_FILL,
+	OP_SAVE_DISK,
 
 	OP_UNKNOWN
 }OpCode;
@@ -67,5 +74,19 @@ int disuguaglianze(stack *my_stack, char op);
 int sum_arr(stack *my_stack);
 
 int dot_product(stack *my_stack);
+
+int op_switch(stack *my_stack);
+
+int over(stack *my_stack);
+
+int drop(stack *my_stack);
+
+int ravel(stack *my_stack);
+
+int op_shape(stack *my_stack);
+
+int fill(stack *my_stack);
+
+int on_disk_save(stack *my_stack);
 
 #endif

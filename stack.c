@@ -134,13 +134,8 @@ void instance_free (array_instance *i){
 /* Frees all instances on the stack, then frees the stack itself.
    * Respects ref_count: instances shared via dup/over are freed only when all references are gone. */
 void stack_free(stack *s){
-	while (s->top > 0){
-		stack_item item = stack_pop_item(s);
-        if (item.type == ITEM_TENSOR)
-            instance_free(item.tensor);
-        else
-            free(item.filename);
-	}
+	while (s->top > 0)
+		stack_free_item(stack_pop_item(s));
 	free(s->stack);
 	free(s);
 }
@@ -158,6 +153,20 @@ int stack_push_string(stack *s, const char *filename){
 	return 0;	
 }
 
+
+void stack_free_item(stack_item item) {
+	if (item.type == ITEM_TENSOR)
+		instance_free(item.tensor);
+	else if (item.type == ITEM_STRING)
+		free(item.filename);
+}
+
+int stack_push_item(stack *s, stack_item item) {
+	if (item.type == ITEM_TENSOR)
+		return stack_push_instance(s, item.tensor);
+	else
+		return stack_push_string(s, item.filename);
+}
 
 /* Pops and returns the top stack_item (tensor or string).
    * Caller must free item.filename if type == ITEM_STRING. */

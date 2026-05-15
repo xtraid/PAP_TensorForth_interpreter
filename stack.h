@@ -10,7 +10,7 @@
 
 typedef struct array_instance array_instance;
 
-typedef enum {ITEM_TENSOR, ITEM_STRING }item_type;
+typedef enum {ITEM_NONE, ITEM_TENSOR, ITEM_STRING} item_type;
 
 typedef struct {
 	item_type type;
@@ -32,7 +32,7 @@ struct array_instance {
 	int32_t ref_count;
 	int32_t on_disk;
 	int32_t data_offset;
-}; // 4 byte di padding 
+}; 
 
 typedef struct {
 	stack_item *stack;
@@ -51,6 +51,8 @@ array_instance *new_instance (float *data, coppia shape);
 void instance_free (array_instance *i);
 int stack_push_string(stack *s, const char *filename);
 stack_item stack_pop_item(stack *s);
+int stack_push_item(stack *s, stack_item item);
+void stack_free_item(stack_item item);
 
 
 #endif 

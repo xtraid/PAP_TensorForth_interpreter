@@ -76,6 +76,13 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `R` | relu | `(a -- relu(a))` | Element-wise ReLU: `max(0, x)` for each element |
 | `m` | min | `(a b -- min(a,b))` | Element-wise minimum of two tensors |
 | `M` | max | `(a b -- max(a,b))` | Element-wise maximum of two tensors |
+| `s` | switch | `(a b -- b a)` | Swap the top two stack items (works for tensors and strings) |
+| `o` | over | `(a b -- b a b)` | Copy the second-from-top item to the top of the stack |
+| `D` | drop | `(a -- )` | Discard and free the top stack item |
+| `_` | ravel | `(a -- a')` | Flatten tensor to a 1D row vector: `[r×c] → [1×(r*c)]` |
+| `#` | shape | `(a -- s)` | Pop tensor, push its shape as a `[1×2]` tensor `[rows cols]` |
+| `f` | fill | `(v s -- r)` | Pop shape `s` and value tensor `v`, push new tensor of shape `s` filled by cycling `v`'s elements |
+| `}` | save disk | `(f a -- )` | Pop filename string `f` and tensor `a`, serialise to binary file (disk format) |
 
 ---
 
@@ -88,6 +95,7 @@ Exactly one whitespace character must separate consecutive tokens. Leading and t
 ### Shape rules
 
 - Binary element-wise operations (`+`, `-`, `*`, `>`, `<`, `=`, `&`, `|`, `$`, `m`, `M`) require both operands to have identical shapes.
+- `f` cycles through `v` if `s` requests more elements than `v` contains.
 - `@` requires `a.cols == b.rows` and both operands must be proper matrices (rows ≥ 2).
 - `r` requires the total number of elements to be preserved: `new_rows * new_cols == old_rows * old_cols`.
 - The `shape` operand for `r` is a `[1×1]` tensor (sets columns, keeps rows=1) or a `[1×2]` tensor `[rows cols]`.
@@ -147,6 +155,30 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 [ 1.0 5.0 3.0 ] [ 4.0 2.0 6.0 ] M p
 ```
 
+**Stack manipulation:**
+```
+[ 1.0 2.0 ] [ 3.0 4.0 ] s p p   # swap: prints [3 4] then [1 2]
+[ 1.0 2.0 ] [ 3.0 4.0 ] o p     # over: copies second to top
+[ 1.0 2.0 3.0 ] D p              # drop: discards [1 2 3], prints nothing new
+```
+
+**Shape inspection and ravel:**
+```
+[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r # shape P   # prints shape [2 3]
+[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r _ p          # ravel to [1×6]
+```
+
+**Fill a tensor with a repeating pattern:**
+```
+[ 1.0 0.0 ] [ 4.0 4.0 ] f p   # 4×4 matrix alternating 1 and 0
+```
+
+**Save and reload a tensor from disk:**
+```
+[ 1.0 2.0 3.0 ] "out.bin" }
+"out.bin" ( p
+```
+
 ---
 
 ## Implementation Notes
@@ -173,16 +205,16 @@ All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N
 
 ### Binary tensor format
 
-Binary `.bin` files are read by `read_image`. The file starts with a fixed-size header:
+The disk format is used by both `(` (load) and `}` (save). Files start with a `disk_header` of fixed size, followed by float data at a fixed offset of 64 bytes:
 
 ```
 int32_t shape[MAX_DIM]   // shape[0]=rows, shape[1]=cols
 int32_t ndim             // 1 or 2
 <4 bytes padding>        // compiler-inserted for off_t alignment
-off_t   data_offset      // byte offset where float data begins
+off_t   data_offset      // byte offset where float data begins (always 64)
 ```
 
-Float data starts at `data_offset` and contains `rows * cols` IEEE 754 single-precision values in row-major order. If `ndim == 1`, `col` is set to 1 and the tensor is treated as a column vector.
+Float data starts at `data_offset` (byte 64) and contains `rows * cols` IEEE 754 single-precision values in row-major order. If `ndim == 1`, the tensor is treated as a row vector `[1×cols]`. The 64-byte offset leaves room for future header extensions without breaking existing files.
 
 ---
 

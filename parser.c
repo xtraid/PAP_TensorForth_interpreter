@@ -31,7 +31,14 @@ static dictionary table[] = {
 	{"?", OP_RANDOM},
 	{"R", OP_RELU},
 	{"m", OP_MIN},
-	{"M", OP_MAX}
+	{"M", OP_MAX},
+	{"s", OP_SWITCH},
+	{"o", OP_OVER},
+	{"D", OP_DROP},
+	{"_", OP_RAVEL},
+	{"#", OP_SHAPE},
+	{"f", OP_FILL},
+	{"}", OP_SAVE_DISK}
 
 };
 
@@ -665,9 +672,16 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
 }
 
 
+/* Pops a filename string, reads a binary tensor file (disk_header format), normalises values
+ * dividing by 255.0, and pushes the result on the stack.
+ * Input: my_stack — the stack (top: filename string).
+ * Output: 0 on success, -1 on error. */
 static int read_image(stack *my_stack) {
     stack_item item = stack_pop_item(my_stack);
-    if (item.type != ITEM_STRING) return -1;
+    if (item.type != ITEM_STRING) {
+        stack_free_item(item);
+        return -1;
+    }
     char *path = item.filename;
 
     FILE *f = fopen(path, "rb");
@@ -709,9 +723,16 @@ static int read_image(stack *my_stack) {
     return 0;
 }
 
+/* Pops a filename string and a tensor, writes it as a PGM (P5) grayscale image.
+ * Values are clamped to [0, 1] then scaled to [0, 255] as uint8.
+ * Input: my_stack — the stack (top: filename string, then tensor).
+ * Output: 0 on success, -1 on error. */
 int save_image(stack *my_stack) {
 	stack_item item = stack_pop_item(my_stack);
-	if (item.type != ITEM_STRING) return -1;
+	if (item.type != ITEM_STRING) {
+		stack_free_item(item);
+		return -1;
+	}
 	char *path = item.filename;
 
 	array_instance *a = stack_pop(my_stack);
@@ -745,6 +766,10 @@ int save_image(stack *my_stack) {
 	instance_free(a);
 	return 0;
 }
+/* Pops a shape tensor (1D, 1 or 2 elements) and pushes a new tensor of that shape
+ * filled with random floats in [0, 1).
+ * Input: my_stack — the stack (top: shape tensor [n] or [rows cols]).
+ * Output: 0 on success, -1 on error. */
 int random_array(stack *my_stack) {
 	array_instance *s = stack_pop(my_stack);
 	if (!s) return -1;
@@ -772,6 +797,9 @@ int random_array(stack *my_stack) {
 }
 
 
+/* Pops a tensor and pushes a new tensor with ReLU applied element-wise: max(0, x).
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
 int relu (stack *my_stack){
 	array_instance *a = stack_pop(my_stack);
 	if (!a) return -1;
@@ -794,7 +822,10 @@ int relu (stack *my_stack){
 }
 
 
-int extrema(stack *my_stack, char op){ // 'm'=min, 'M'=max
+/* Pops two tensors a (top) and b of identical shape, pushes element-wise min or max.
+ * Input: my_stack — the stack, op — 'm' for min, 'M' for max.
+ * Output: 0 on success, -1 on error. */
+int extrema(stack *my_stack, char op){
 	array_instance *a = stack_pop(my_stack);
 	if (a == NULL) return -1;
 	array_instance *b = stack_pop(my_stack);
@@ -829,6 +860,214 @@ int extrema(stack *my_stack, char op){ // 'm'=min, 'M'=max
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return -1; }
 	return 0;
 }
+
+
+/* Swaps the top two stack items. Works for both tensors and strings.
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int op_switch(stack *my_stack){
+	stack_item a = stack_pop_item(my_stack);
+	if (a.type == ITEM_NONE)
+		return -1;
+	stack_item b = stack_pop_item(my_stack);
+	if (b.type == ITEM_NONE) {
+		stack_free_item(a);
+		return -1;
+	}
+	int err = stack_push_item(my_stack, a);
+	stack_free_item(a);
+	if (err != 0) { stack_free_item(b); return -1; }
+	err = stack_push_item(my_stack, b);
+	stack_free_item(b);
+	return err;
+}
+
+/* Copies the second-from-top item to the top: ( a b -- a b a ).
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int over (stack *my_stack){
+	stack_item a = stack_pop_item(my_stack);
+	if (a.type == ITEM_NONE)
+		return -1;
+	stack_item b = stack_pop_item(my_stack);
+	if (b.type == ITEM_NONE) {
+		stack_free_item(a);
+		return -1;
+	}
+	int err = stack_push_item(my_stack, b);
+	if (err != 0) { 
+		stack_free_item(b);
+		stack_free_item(a);
+		return -1;
+	}
+	err = stack_push_item(my_stack, a);
+	stack_free_item(a);
+	if (err != 0) { 
+		stack_free_item(b);
+		return -1;
+	}
+	err = stack_push_item(my_stack, b);
+	stack_free_item(b);
+	return err;	
+}
+
+/* Pops and discards the top stack item.
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int drop (stack *my_stack){
+	stack_item a = stack_pop_item(my_stack);
+	if (a.type == ITEM_NONE)
+		return -1;
+	stack_free_item(a);
+	return 0;	
+}
+
+/* Flattens the top tensor to a 1D row vector in place: shape [r c] -> [1, r*c].
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int ravel(stack *my_stack) {
+	array_instance *a = stack_pop(my_stack);
+	if (!a) return -1;
+	a->shape.col = a->shape.row * a->shape.col;
+	a->shape.row = 1;
+	if (stack_push_instance(my_stack, a) != 0) {
+		instance_free(a);
+		return -1;
+	}
+	instance_free(a);
+	return 0;
+}
+
+/* Pops a tensor and pushes a 1D tensor [1×2] containing its shape [rows, cols].
+ * Input: my_stack — the stack.
+ * Output: 0 on success, -1 on error. */
+int op_shape(stack *my_stack) {
+	array_instance *a = stack_pop(my_stack);
+	if (!a) return -1;
+	float *shape_arr = malloc(sizeof(float) * 2);
+	if (!shape_arr) {
+		perror("malloc");
+		instance_free(a);
+		return -1;
+	}
+	shape_arr[0] = (float)a->shape.row;
+	shape_arr[1] = (float)a->shape.col;
+	instance_free(a);
+	coppia shape = {1, 2};
+	if (stack_push(my_stack, shape_arr, shape) != 0) {
+		free(shape_arr);
+		return -1;
+	}
+	return 0;
+}
+
+
+/* Pops a value tensor v (top) and a shape tensor s, pushes a new tensor of shape s
+ * filled by cycling through the elements of v.
+ * Input: my_stack — the stack (top: v, then s).
+ * Output: 0 on success, -1 on error. */
+int fill(stack *my_stack) {
+	array_instance *v = stack_pop(my_stack);
+	if (!v) return -1;
+	array_instance *s = stack_pop(my_stack);
+	if (!s) { instance_free(v); return -1; }
+
+	if (s->shape.row != 1 || s->shape.col < 1 || s->shape.col > 2) {
+		fprintf(stderr, "errore: fill richiede shape 1D di 1 o 2 elementi\n");
+		instance_free(s); instance_free(v); return -1;
+	}
+	int row = (s->shape.col == 2) ? (int)s->data[0] : 1;
+	int col = (s->shape.col == 2) ? (int)s->data[1] : (int)s->data[0];
+	instance_free(s);
+
+	int n = row * col;
+	int m = v->shape.row * v->shape.col;
+	float *new_data = malloc(sizeof(float) * (size_t)n);
+	if (!new_data) { perror("malloc"); instance_free(v); return -1; }
+
+	for (int i = 0; i < n; i++)
+		new_data[i] = v->data[i % m];
+
+	instance_free(v);
+	coppia shape = {row, col};
+	if (stack_push(my_stack, new_data, shape) != 0) {
+		free(new_data);
+		return -1;
+	}
+	return 0;
+}
+
+
+typedef struct {
+	int32_t shape[MAX_DIM];
+	int32_t ndim;
+	off_t data_offset;
+} disk_header;
+
+/* Pops a filename string and a tensor, serialises the tensor to a binary file.
+ * Header (64 bytes): shape, ndim, data_offset. Float data starts at byte 64.
+ * Input: my_stack — the stack (top: filename string, then tensor).
+ * Output: 0 on success, -1 on argument error, -2 on I/O error. */
+int on_disk_save(stack *my_stack){
+	stack_item item = stack_item_pop(my_stack);
+	if (item.type != ITEM_STRING) {
+		fprintf(stderr, "errore: atteso un filename");
+		return -1;
+	}
+	char *path = item.filename;
+	array_instance *a = stack_pop(my_stack);
+	if (!a){
+		free(path);
+		return -1;
+	}
+
+	disk_header header;
+	header.shape[0] = a->shape.row;
+	header.shape[1] = a->shape.col;
+	if (header.shape[0] == 1)
+		header.ndim = 1;
+	else
+		header.ndim = 2;
+	header.data_offset = 64;
+
+	FILE *fd = fopen(path, "wb");
+	if(!fd){
+		perror("fopen");
+		free(path);
+		instance_free(a);
+		return -2;
+	}
+	if(fwrite(&header, sizeof(header), 1, fd) != 1){
+		perror("fwrite");
+		fclose(fd);
+		free(path);
+		instance_free(a);
+		return -2;
+	}
+	if(fseek(fd, header.data_offset, SEEK_SET) != 0){
+		perror("fseek");
+		fclose(fd);
+		free(path);
+		instance_free(a);
+		return -2;
+	}
+	size_t n = (size_t)(a->shape.row * a->shape.col);
+	if(fwrite(a->data, sizeof(float), n, fd) != n){
+		perror("fwrite");
+		fclose(fd);
+		free(path);
+		instance_free(a);
+		return -2;
+	}
+
+	fclose(fd);
+	free(path);
+	instance_free(a);
+	return 0;
+	
+	
+}
+
 
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Enforces exactly one whitespace separator between consecutive tokens.
@@ -918,6 +1157,13 @@ int parser(const char *s, stack *my_stack){
 			case OP_RELU: if (relu(my_stack) != 0) return -1; break;
 			case OP_MIN: if (extrema(my_stack, 'm') != 0) return -1; break;
 			case OP_MAX: if (extrema(my_stack, 'M') != 0) return -1; break;
+			case OP_SWITCH: if (op_switch(my_stack) != 0) return -1; break;
+			case OP_OVER: if (over(my_stack) != 0) return -1; break;
+			case OP_DROP: if (drop(my_stack) != 0) return -1; break;
+			case OP_RAVEL: if (ravel(my_stack) != 0) return -1; break;
+			case OP_SHAPE: if (op_shape(my_stack) != 0) return -1; break;
+			case OP_FILL: if (fill(my_stack) != 0) return -1; break;
+			case OP_SAVE_DISK: if (on_disk_save(my_stack) != 0) return -1; break;
 
 			default:
 				fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
