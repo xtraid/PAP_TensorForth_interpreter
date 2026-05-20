@@ -1,0 +1,480 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 90.07      2.63     2.63                             kernel
+  3.08      2.72     0.09       56     1.61     1.61  random_array
+  2.05      2.78     0.06  3000000     0.00     0.00  c_dot
+  1.37      2.82     0.04        2    20.00    20.00  op_logiche_2_arg
+  1.37      2.86     0.04                             _init
+  0.68      2.88     0.02        4     5.00     5.00  transpose
+  0.34      2.89     0.01        3     3.33    23.33  convoluzione
+  0.34      2.90     0.01        2     5.00     5.00  extrema
+  0.34      2.91     0.01        1    10.00    10.00  mask
+  0.34      2.92     0.01        1    10.00    10.00  op_not
+  0.00      2.92     0.00      183     0.00     0.00  lookup
+  0.00      2.92     0.00      153     0.00     0.00  instance_free
+  0.00      2.92     0.00      146     0.00     0.00  new_instance
+  0.00      2.92     0.00      146     0.00     0.00  stack_push
+  0.00      2.92     0.00      116     0.00     0.00  stack_pop
+  0.00      2.92     0.00       59     0.00     0.00  parse_array
+  0.00      2.92     0.00       37     0.00     0.00  stack_free_item
+  0.00      2.92     0.00       37     0.00     0.00  stack_pop_item
+  0.00      2.92     0.00       33     0.00     0.00  drop
+  0.00      2.92     0.00        9     0.00     0.00  disuguaglianze
+  0.00      2.92     0.00        9     0.00     0.00  stack_resize
+  0.00      2.92     0.00        7     0.00     0.00  stack_push_instance
+  0.00      2.92     0.00        5     0.00     0.00  stack_push_item
+  0.00      2.92     0.00        4     0.00     0.00  blocked_multiply
+  0.00      2.92     0.00        4     0.00     5.00  mat_mat_mul
+  0.00      2.92     0.00        3     0.00     0.00  algebra
+  0.00      2.92     0.00        3     0.00     0.00  padding
+  0.00      2.92     0.00        1     0.00     0.00  dot_product
+  0.00      2.92     0.00        1     0.00     0.00  duplicate
+  0.00      2.92     0.00        1     0.00     0.00  fill
+  0.00      2.92     0.00        1     0.00     0.00  get_command
+  0.00      2.92     0.00        1     0.00     0.00  op_reshape
+  0.00      2.92     0.00        1     0.00     0.00  op_shape
+  0.00      2.92     0.00        1     0.00     0.00  op_switch
+  0.00      2.92     0.00        1     0.00     0.00  open_file
+  0.00      2.92     0.00        1     0.00     0.00  over
+  0.00      2.92     0.00        1     0.00   250.00  parser
+  0.00      2.92     0.00        1     0.00     0.00  ravel
+  0.00      2.92     0.00        1     0.00     0.00  relu
+  0.00      2.92     0.00        1     0.00     0.00  stack_free
+  0.00      2.92     0.00        1     0.00     0.00  stack_init
+  0.00      2.92     0.00        1     0.00     0.00  stack_peek
+  0.00      2.92     0.00        1     0.00     0.00  sum_arr
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 4 byte(s) for 0.34% of 2.92 seconds
+
+index % time    self  children    called     name
+                               16355             kernel [1]
+[1]     90.1    2.63    0.00       0+16355   kernel [1]
+                               16355             kernel [1]
+-----------------------------------------------
+                0.00    0.25       1/1           main [3]
+[2]      8.6    0.00    0.25       1         parser [2]
+                0.09    0.00      56/56          random_array [4]
+                0.01    0.06       3/3           convoluzione [5]
+                0.04    0.00       2/2           op_logiche_2_arg [7]
+                0.00    0.02       4/4           mat_mat_mul [9]
+                0.01    0.00       2/2           extrema [11]
+                0.01    0.00       1/1           op_not [13]
+                0.01    0.00       1/1           mask [12]
+                0.00    0.00     183/183         lookup [14]
+                0.00    0.00      59/59          parse_array [19]
+                0.00    0.00      33/33          drop [22]
+                0.00    0.00       9/9           disuguaglianze [23]
+                0.00    0.00       3/3           algebra [28]
+                0.00    0.00       1/1           duplicate [31]
+                0.00    0.00       1/1           op_reshape [34]
+                0.00    0.00       1/1           sum_arr [44]
+                0.00    0.00       1/1           dot_product [30]
+                0.00    0.00       1/1           relu [40]
+                0.00    0.00       1/1           op_switch [36]
+                0.00    0.00       1/1           over [38]
+                0.00    0.00       1/1           ravel [39]
+                0.00    0.00       1/1           op_shape [35]
+                0.00    0.00       1/1           fill [32]
+-----------------------------------------------
+                                                 <spontaneous>
+[3]      8.6    0.00    0.25                 main [3]
+                0.00    0.25       1/1           parser [2]
+                0.00    0.00       1/1           open_file [37]
+                0.00    0.00       1/1           get_command [33]
+                0.00    0.00       1/1           stack_init [42]
+                0.00    0.00       1/1           stack_free [41]
+-----------------------------------------------
+                0.09    0.00      56/56          parser [2]
+[4]      3.1    0.09    0.00      56         random_array [4]
+                0.00    0.00      56/116         stack_pop [18]
+                0.00    0.00      56/153         instance_free [15]
+                0.00    0.00      56/146         stack_push [17]
+-----------------------------------------------
+                0.01    0.06       3/3           parser [2]
+[5]      2.4    0.01    0.06       3         convoluzione [5]
+                0.06    0.00 3000000/3000000     c_dot [6]
+                0.00    0.00       6/116         stack_pop [18]
+                0.00    0.00       6/153         instance_free [15]
+                0.00    0.00       3/3           padding [29]
+                0.00    0.00       3/146         stack_push [17]
+-----------------------------------------------
+                0.06    0.00 3000000/3000000     convoluzione [5]
+[6]      2.1    0.06    0.00 3000000         c_dot [6]
+-----------------------------------------------
+                0.04    0.00       2/2           parser [2]
+[7]      1.4    0.04    0.00       2         op_logiche_2_arg [7]
+                0.00    0.00       4/116         stack_pop [18]
+                0.00    0.00       4/153         instance_free [15]
+                0.00    0.00       2/146         stack_push [17]
+-----------------------------------------------
+                                                 <spontaneous>
+[8]      1.4    0.04    0.00                 _init [8]
+-----------------------------------------------
+                0.00    0.02       4/4           parser [2]
+[9]      0.7    0.00    0.02       4         mat_mat_mul [9]
+                0.02    0.00       4/4           transpose [10]
+                0.00    0.00       8/116         stack_pop [18]
+                0.00    0.00       8/153         instance_free [15]
+                0.00    0.00       4/4           blocked_multiply [27]
+                0.00    0.00       4/146         stack_push [17]
+-----------------------------------------------
+                0.02    0.00       4/4           mat_mat_mul [9]
+[10]     0.7    0.02    0.00       4         transpose [10]
+-----------------------------------------------
+                0.01    0.00       2/2           parser [2]
+[11]     0.3    0.01    0.00       2         extrema [11]
+                0.00    0.00       4/116         stack_pop [18]
+                0.00    0.00       4/153         instance_free [15]
+                0.00    0.00       2/146         stack_push [17]
+-----------------------------------------------
+                0.01    0.00       1/1           parser [2]
+[12]     0.3    0.01    0.00       1         mask [12]
+                0.00    0.00       3/116         stack_pop [18]
+                0.00    0.00       3/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.01    0.00       1/1           parser [2]
+[13]     0.3    0.01    0.00       1         op_not [13]
+                0.00    0.00       1/116         stack_pop [18]
+                0.00    0.00       1/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00     183/183         parser [2]
+[14]     0.0    0.00    0.00     183         lookup [14]
+-----------------------------------------------
+                0.00    0.00       1/153         op_not [13]
+                0.00    0.00       1/153         sum_arr [44]
+                0.00    0.00       1/153         relu [40]
+                0.00    0.00       1/153         ravel [39]
+                0.00    0.00       1/153         op_shape [35]
+                0.00    0.00       2/153         op_reshape [34]
+                0.00    0.00       2/153         dot_product [30]
+                0.00    0.00       2/153         fill [32]
+                0.00    0.00       3/153         mask [12]
+                0.00    0.00       4/153         op_logiche_2_arg [7]
+                0.00    0.00       4/153         extrema [11]
+                0.00    0.00       6/153         algebra [28]
+                0.00    0.00       6/153         convoluzione [5]
+                0.00    0.00       8/153         mat_mat_mul [9]
+                0.00    0.00      18/153         disuguaglianze [23]
+                0.00    0.00      37/153         stack_free_item [20]
+                0.00    0.00      56/153         random_array [4]
+[15]     0.0    0.00    0.00     153         instance_free [15]
+-----------------------------------------------
+                0.00    0.00     146/146         stack_push [17]
+[16]     0.0    0.00    0.00     146         new_instance [16]
+-----------------------------------------------
+                0.00    0.00       1/146         op_reshape [34]
+                0.00    0.00       1/146         op_not [13]
+                0.00    0.00       1/146         mask [12]
+                0.00    0.00       1/146         sum_arr [44]
+                0.00    0.00       1/146         dot_product [30]
+                0.00    0.00       1/146         relu [40]
+                0.00    0.00       1/146         op_shape [35]
+                0.00    0.00       1/146         fill [32]
+                0.00    0.00       2/146         op_logiche_2_arg [7]
+                0.00    0.00       2/146         extrema [11]
+                0.00    0.00       3/146         algebra [28]
+                0.00    0.00       3/146         convoluzione [5]
+                0.00    0.00       4/146         mat_mat_mul [9]
+                0.00    0.00       9/146         disuguaglianze [23]
+                0.00    0.00      56/146         random_array [4]
+                0.00    0.00      59/146         parse_array [19]
+[17]     0.0    0.00    0.00     146         stack_push [17]
+                0.00    0.00     146/146         new_instance [16]
+                0.00    0.00       4/9           stack_resize [24]
+-----------------------------------------------
+                0.00    0.00       1/116         op_not [13]
+                0.00    0.00       1/116         sum_arr [44]
+                0.00    0.00       1/116         relu [40]
+                0.00    0.00       1/116         ravel [39]
+                0.00    0.00       1/116         op_shape [35]
+                0.00    0.00       2/116         op_reshape [34]
+                0.00    0.00       2/116         dot_product [30]
+                0.00    0.00       2/116         fill [32]
+                0.00    0.00       3/116         mask [12]
+                0.00    0.00       4/116         op_logiche_2_arg [7]
+                0.00    0.00       4/116         extrema [11]
+                0.00    0.00       6/116         algebra [28]
+                0.00    0.00       6/116         convoluzione [5]
+                0.00    0.00       8/116         mat_mat_mul [9]
+                0.00    0.00      18/116         disuguaglianze [23]
+                0.00    0.00      56/116         random_array [4]
+[18]     0.0    0.00    0.00     116         stack_pop [18]
+                0.00    0.00       3/9           stack_resize [24]
+-----------------------------------------------
+                0.00    0.00      59/59          parser [2]
+[19]     0.0    0.00    0.00      59         parse_array [19]
+                0.00    0.00      59/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       2/37          op_switch [36]
+                0.00    0.00       2/37          over [38]
+                0.00    0.00      33/37          drop [22]
+[20]     0.0    0.00    0.00      37         stack_free_item [20]
+                0.00    0.00      37/153         instance_free [15]
+-----------------------------------------------
+                0.00    0.00       2/37          op_switch [36]
+                0.00    0.00       2/37          over [38]
+                0.00    0.00      33/37          drop [22]
+[21]     0.0    0.00    0.00      37         stack_pop_item [21]
+                0.00    0.00       1/9           stack_resize [24]
+-----------------------------------------------
+                0.00    0.00      33/33          parser [2]
+[22]     0.0    0.00    0.00      33         drop [22]
+                0.00    0.00      33/37          stack_pop_item [21]
+                0.00    0.00      33/37          stack_free_item [20]
+-----------------------------------------------
+                0.00    0.00       9/9           parser [2]
+[23]     0.0    0.00    0.00       9         disuguaglianze [23]
+                0.00    0.00      18/116         stack_pop [18]
+                0.00    0.00      18/153         instance_free [15]
+                0.00    0.00       9/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/9           stack_push_instance [25]
+                0.00    0.00       1/9           stack_pop_item [21]
+                0.00    0.00       3/9           stack_pop [18]
+                0.00    0.00       4/9           stack_push [17]
+[24]     0.0    0.00    0.00       9         stack_resize [24]
+-----------------------------------------------
+                0.00    0.00       1/7           duplicate [31]
+                0.00    0.00       1/7           ravel [39]
+                0.00    0.00       5/7           stack_push_item [26]
+[25]     0.0    0.00    0.00       7         stack_push_instance [25]
+                0.00    0.00       1/9           stack_resize [24]
+-----------------------------------------------
+                0.00    0.00       2/5           op_switch [36]
+                0.00    0.00       3/5           over [38]
+[26]     0.0    0.00    0.00       5         stack_push_item [26]
+                0.00    0.00       5/7           stack_push_instance [25]
+-----------------------------------------------
+                0.00    0.00       4/4           mat_mat_mul [9]
+[27]     0.0    0.00    0.00       4         blocked_multiply [27]
+-----------------------------------------------
+                0.00    0.00       3/3           parser [2]
+[28]     0.0    0.00    0.00       3         algebra [28]
+                0.00    0.00       6/116         stack_pop [18]
+                0.00    0.00       6/153         instance_free [15]
+                0.00    0.00       3/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       3/3           convoluzione [5]
+[29]     0.0    0.00    0.00       3         padding [29]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[30]     0.0    0.00    0.00       1         dot_product [30]
+                0.00    0.00       2/116         stack_pop [18]
+                0.00    0.00       2/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[31]     0.0    0.00    0.00       1         duplicate [31]
+                0.00    0.00       1/1           stack_peek [43]
+                0.00    0.00       1/7           stack_push_instance [25]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[32]     0.0    0.00    0.00       1         fill [32]
+                0.00    0.00       2/116         stack_pop [18]
+                0.00    0.00       2/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/1           main [3]
+[33]     0.0    0.00    0.00       1         get_command [33]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[34]     0.0    0.00    0.00       1         op_reshape [34]
+                0.00    0.00       2/116         stack_pop [18]
+                0.00    0.00       2/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[35]     0.0    0.00    0.00       1         op_shape [35]
+                0.00    0.00       1/116         stack_pop [18]
+                0.00    0.00       1/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[36]     0.0    0.00    0.00       1         op_switch [36]
+                0.00    0.00       2/37          stack_pop_item [21]
+                0.00    0.00       2/5           stack_push_item [26]
+                0.00    0.00       2/37          stack_free_item [20]
+-----------------------------------------------
+                0.00    0.00       1/1           main [3]
+[37]     0.0    0.00    0.00       1         open_file [37]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[38]     0.0    0.00    0.00       1         over [38]
+                0.00    0.00       3/5           stack_push_item [26]
+                0.00    0.00       2/37          stack_pop_item [21]
+                0.00    0.00       2/37          stack_free_item [20]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[39]     0.0    0.00    0.00       1         ravel [39]
+                0.00    0.00       1/116         stack_pop [18]
+                0.00    0.00       1/7           stack_push_instance [25]
+                0.00    0.00       1/153         instance_free [15]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[40]     0.0    0.00    0.00       1         relu [40]
+                0.00    0.00       1/116         stack_pop [18]
+                0.00    0.00       1/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+                0.00    0.00       1/1           main [3]
+[41]     0.0    0.00    0.00       1         stack_free [41]
+-----------------------------------------------
+                0.00    0.00       1/1           main [3]
+[42]     0.0    0.00    0.00       1         stack_init [42]
+-----------------------------------------------
+                0.00    0.00       1/1           duplicate [31]
+[43]     0.0    0.00    0.00       1         stack_peek [43]
+-----------------------------------------------
+                0.00    0.00       1/1           parser [2]
+[44]     0.0    0.00    0.00       1         sum_arr [44]
+                0.00    0.00       1/116         stack_pop [18]
+                0.00    0.00       1/153         instance_free [15]
+                0.00    0.00       1/146         stack_push [17]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+   [8] _init                  [12] mask                   [40] relu
+  [28] algebra                 [9] mat_mat_mul            [41] stack_free
+  [27] blocked_multiply (parser.c) [16] new_instance      [20] stack_free_item
+   [6] c_dot                   [7] op_logiche_2_arg       [42] stack_init
+   [5] convoluzione           [13] op_not                 [43] stack_peek
+  [23] disuguaglianze         [34] op_reshape             [18] stack_pop
+  [30] dot_product            [35] op_shape               [21] stack_pop_item
+  [22] drop                   [36] op_switch              [17] stack_push
+  [31] duplicate              [37] open_file              [25] stack_push_instance
+  [11] extrema                [38] over                   [26] stack_push_item
+  [32] fill                   [29] padding                [24] stack_resize
+  [33] get_command            [19] parse_array (parser.c) [44] sum_arr
+  [15] instance_free           [2] parser                 [10] transpose (parser.c)
+   [1] kernel (parser.c)       [4] random_array
+  [14] lookup                 [39] ravel

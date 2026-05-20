@@ -674,7 +674,7 @@ float *padding(float *data, int row, int col, int pad_dim) {
     return new_data;
 }
 
-float c_dot(float *window_start, float *k, int stride, int shape_k) {
+static inline float c_dot(float *window_start, float *k, int stride, int shape_k) {
     float sum = 0.0f;
     for (int r = 0; r < shape_k; r++) {
         for (int c = 0; c < shape_k; c++) {
@@ -723,6 +723,7 @@ int convoluzione(stack *my_stack) {
     float *out = malloc(sizeof(float) * (size_t)(a_rows * a_cols));
     if (!out) { free(expanded_data); instance_free(k); instance_free(a); return -1; }
 
+    #pragma omp parallel for collapse(2) schedule(static)
     for (int i = 0; i < a_rows; i++) {
         for (int j = 0; j < a_cols; j++) {
             float *window = &expanded_data[i * col_padded + j];
