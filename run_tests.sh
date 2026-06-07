@@ -249,6 +249,11 @@ run_test "dot product su matrici 2D" \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r ." \
     ""
 
+run_test "dot product lunghezze diverse" \
+    fail \
+    "[ 1.0 2.0 3.0 ] [ 1.0 2.0 ] ." \
+    "incompatibili"
+
 echo ""
 echo "=== TEST SWAP / OVER / DROP ======================================="
 
@@ -284,6 +289,11 @@ run_test "ravel 1D rimane 1D" \
     pass \
     "[ 1.0 2.0 3.0 ] _ p" \
     "Tensor(shape=[1 3]"
+
+run_test "ravel aliasing: d _ non muta shape originale" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r d _ D # p" \
+    "2.000000 2.000000"
 
 run_test "shape di 1D" \
     pass \
@@ -341,6 +351,11 @@ run_test "max element-wise" \
     "[ 1.0 5.0 3.0 ] [ 4.0 2.0 3.0 ] M p" \
     "4.000000 5.000000 3.000000"
 
+run_test "min con inf non propaga NaN" \
+    pass \
+    "[ inf 5.0 ] [ 5.0 inf ] m p" \
+    "5.000000 5.000000"
+
 echo ""
 echo "=== TEST I/O DISCO (save + load roundtrip) ======================="
 
@@ -367,6 +382,89 @@ run_test "load file inesistente" \
     fail \
     "\"/tmp/nonexistent_tf_xyz.bin\" {" \
     ""
+
+echo ""
+echo "=== TEST CONVOLUZIONE ============================================"
+
+run_test "conv identita 3x3 preserva valori" \
+    pass \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 ] [ 3.0 3.0 ] r c p" \
+    "1.000000 2.000000 3.000000 4.000000"
+
+run_test "conv kernel 1D" \
+    fail \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 ] c" \
+    "2D"
+
+run_test "conv kernel non quadrato" \
+    fail \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r c" \
+    "quadrata"
+
+run_test "conv kernel ordine pari" \
+    fail \
+    "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r c" \
+    "dispari"
+
+echo ""
+echo "=== TEST PGM I/O ================================================="
+
+run_test "load PGM: shape corretta" \
+    pass \
+    "\"examples/cray-2.pgm\" ( # p" \
+    "680.000000 1020.000000"
+
+TMPPGM=$(mktemp /tmp/tf_pgm_XXXXXX.pgm)
+
+run_test "save PGM: exit 0" \
+    pass \
+    "[ 3.0 3.0 ] ? \"$TMPPGM\" )" \
+    ""
+
+run_test "save+load PGM: shape preservata" \
+    pass \
+    "[ 3.0 3.0 ] [ 0.5 ] f \"$TMPPGM\" ) \"$TMPPGM\" ( # p" \
+    "3.000000 3.000000"
+
+rm -f "$TMPPGM"
+
+echo ""
+echo "=== TEST ROBUSTEZZA (input invalidi) ============================="
+
+run_test "array vuoto [ ]" \
+    fail \
+    "[ ]" \
+    "array vuoto"
+
+run_test "random dimensione negativa" \
+    fail \
+    "[ -1.0 3.0 ] ?" \
+    ">= 1"
+
+run_test "random dimensione zero" \
+    fail \
+    "[ 0.0 3.0 ] ?" \
+    ">= 1"
+
+run_test "fill dimensione zero" \
+    fail \
+    "[ 0.0 3.0 ] [ 1.0 ] f" \
+    ">= 1"
+
+run_test "reshape dimensione zero" \
+    fail \
+    "[ 1.0 2.0 ] [ 0.0 2.0 ] r" \
+    ">= 1"
+
+run_test "reshape overflow dimensioni" \
+    fail \
+    "[ 1.0 2.0 ] [ 100000.0 100000.0 ] r" \
+    "troppo grande"
+
+run_test "random overflow dimensioni" \
+    fail \
+    "[ 100000.0 100000.0 ] ?" \
+    "troppo grande"
 
 echo ""
 echo "=== STRESS TEST =================================================="

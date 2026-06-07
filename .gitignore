@@ -2,3 +2,7 @@
 tensorforth
 ANALISI_PROGETTO.md
 CLAUDE.md
+profiling/*.out
+profiling/*.svg
+profiling/gmon.out
+profiling/on_disk.png
