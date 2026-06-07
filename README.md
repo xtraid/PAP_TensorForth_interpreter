@@ -240,11 +240,16 @@ Float data starts at `data_offset` (byte 64) and contains `rows * cols` IEEE 754
 ```
 .
 ├── main.c                    # Entry point; reads script and runs interpreter
-├── parser.c / parser.h       # Opcode dispatch and all operation implementations
+├── parser.c / parser.h       # Opcode dispatch table, token lookup, array/string parsing
+├── ops_stack.c               # Stack operations: reshape, print, dup, switch, over, drop, ravel, shape, fill
+├── ops_math.c                # Element-wise ops: arithmetic, comparisons, logical, relu, min/max
+├── ops_linalg.c              # Linear algebra: matrix multiply (blocked), sum, dot product
+├── ops_conv.c                # 2D convolution with zero-padding
+├── ops_io.c                  # I/O: PGM load/save, binary disk format, random array
 ├── stack.c / stack.h         # Dynamic stack with reference-counted tensor values
 ├── reader.c / reader.h       # File I/O utilities
 ├── Makefile
-├── run_tests.sh              # Test suite (65 tests, supports --valgrind)
+├── run_tests.sh              # Test suite (82 tests, supports --valgrind)
 └── examples/
     ├── cray-2.pgm                   # Sample greyscale image (PGM P5)
     ├── image_blur.tensorforth       # 5×5 box blur on cray-2.pgm
