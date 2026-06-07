@@ -1,5 +1,7 @@
 #include "parser.h"
 #include <ctype.h>
+#include <limits.h>
+#include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -111,6 +113,11 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 
 	long end = tmp;  /* posizione di ']' */
 
+	if (count == 0) {
+		fprintf(stderr, "errore: array vuoto '[ ]' non supportato\n");
+		return -1;
+	}
+
 	/* seconda passata: alloca esattamente `count` elementi e riempie.
 	 * Il doppio scan è deliberato: la prima passata conta gli elementi per evitare
 	 * realloc su array di dimensione arbitraria. */
@@ -142,6 +149,7 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 
 /* Pops s (shape tensor: 1D, 1 or 2 elements) then a, reshapes a to the dimensions in s.
  * Memory layout is unchanged; only shape.row and shape.col are updated.
+ * Validates dimensions >= 1 and product <= INT_MAX (entry point for user-supplied dims).
  * Input: my_stack — the stack.
  * Output: 0 on success, -1 on error. */
 int op_reshape(stack *my_stack){
@@ -158,6 +166,15 @@ int op_reshape(stack *my_stack){
 	int new_rows = (s->shape.col == 2) ? (int)s->data[0] : 1;
 	int new_cols = (s->shape.col == 2) ? (int)s->data[1] : (int)s->data[0];
 
+	if (new_rows < 1 || new_cols < 1) {
+		fprintf(stderr, "errore: reshape richiede dimensioni >= 1\n");
+		instance_free(s); instance_free(a); return -1;
+	}
+	int64_t n64 = (int64_t)new_rows * (int64_t)new_cols;
+	if (n64 > INT_MAX) {
+		fprintf(stderr, "errore: tensore troppo grande\n");
+		instance_free(s); instance_free(a); return -1;
+	}
 	if (new_rows * new_cols != a->shape.row * a->shape.col){
 		fprintf(stderr, "errore: reshape incompatibile [%d %d] -> [%d %d]\n",
 			a->shape.row, a->shape.col, new_rows, new_cols);
@@ -256,22 +273,25 @@ int algebra (stack *my_stack, char op) {
 	float * restrict a_data = a->data;
 	float * restrict b_data = b->data;
 	// perf: restrict on new_data — guarantees no aliasing with a_data/b_data, enables auto-vectorisation
-	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	float * restrict new_data = malloc(sizeof(float) * (size_t)(rows * cols));
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	/* row-major: elemento (i,j) -> data[i * shape.col + j] */
 	if (op == 'a'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] + b_data[i * cols + j];
 			}
 		}
 	} else if(op == 's'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] - b_data[i * cols + j];
 			}
 		}
 	} else if(op == 'p'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] * b_data[i * cols + j];
@@ -309,21 +329,24 @@ int disuguaglianze (stack *my_stack, char op) {
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
 	float * restrict b_data = b->data;
-	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	float * restrict new_data = malloc(sizeof(float) * (size_t)(rows * cols));
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	if (op == 'M'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] > b_data[i * cols + j];
 			}
 		}
 	} else if(op == 'm'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] < b_data[i * cols + j];
 			}
 		}
 	} else if(op == 'u'){
+		#pragma omp parallel for collapse(2) schedule(static)
 		for (int i = 0; i < rows; i++) {
 			for (int j = 0; j < cols; j++) {
 				new_data[i * cols + j] = a_data[i * cols + j] == b_data[i * cols + j];
@@ -362,7 +385,7 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 	float * restrict a_data = a->data;
 	float * restrict b_data = b->data;
 	int n = rows * cols;
-	float * restrict new_data = calloc((size_t)n, sizeof(float));
+	float * restrict new_data = malloc(sizeof(float) * (size_t)n);
 	if (new_data == NULL) { instance_free(a); instance_free(b); return -1; }
 	for (int k = 0; k < n; k++) {
 		if (a_data[k] != 0.f && a_data[k] != 1.f) {
@@ -375,8 +398,10 @@ int op_logiche_2_arg (stack *my_stack, char op) {
 			free(new_data); instance_free(a); instance_free(b);
 			return -2;
 		}
-		new_data[k] = (op == 'a') ? (float)(a_data[k] && b_data[k]) : (float)(a_data[k] || b_data[k]);
 	}
+	#pragma omp parallel for schedule(static)
+	for (int k = 0; k < n; k++)
+		new_data[k] = (op == 'a') ? (float)(a_data[k] && b_data[k]) : (float)(a_data[k] || b_data[k]);
 	coppia shape;
 	shape.row = rows;
 	shape.col = cols;
@@ -398,21 +423,18 @@ int op_not (stack *my_stack){
 	int rows = a->shape.row;
 	int cols = a->shape.col;
 	float * restrict a_data = a->data;
-	float * restrict new_data = calloc((size_t)(rows * cols), sizeof(float));
+	float * restrict new_data = malloc(sizeof(float) * (size_t)(rows * cols));
 	if (new_data == NULL) { instance_free(a); return -1; }
-	for (int i = 0; i < rows; i++){
-		for (int j = 0; j < cols; j++){
-			float val = a_data[i * cols + j];
-			if (val == 0.f || val == 1.f){
-				new_data[i * cols + j] = 1.f - val;
-			} else {
-				fprintf(stderr, "errore: not su array non booleano, elemento (%d, %d) = %f\n", i, j, val);
-				free(new_data);
-				instance_free(a);
-				return -1;
-			}
+	int n_not = rows * cols;
+	for (int i = 0; i < n_not; i++) {
+		if (a_data[i] != 0.f && a_data[i] != 1.f) {
+			fprintf(stderr, "errore: not su array non booleano, elemento (%d, %d) = %f\n", i / cols, i % cols, a_data[i]);
+			free(new_data); instance_free(a); return -1;
 		}
 	}
+	#pragma omp parallel for schedule(static)
+	for (int i = 0; i < n_not; i++)
+		new_data[i] = 1.f - a_data[i];
 	coppia shape;
 	shape.row = rows;
 	shape.col = cols;
@@ -456,7 +478,7 @@ int mask (stack *my_stack) {
 	for (int i = 0; i < m_rows; i++){
 		for (int j = 0; j < m_cols; j++){
 			if (m->data[i * m_cols + j] != 0.f && m->data[i * m_cols + j] != 1.f){
-				fprintf(stderr, "errore: not su array non booleano, elemento (%d, %d) = %f\n", i, j, m->data[i * m_cols + j]);
+				fprintf(stderr, "errore: mask su maschera non booleana, elemento (%d, %d) = %f\n", i, j, m->data[i * m_cols + j]);
 				instance_free(m);
 				instance_free(a);
 				instance_free(b);
@@ -472,11 +494,13 @@ int mask (stack *my_stack) {
 		instance_free(b);
 		return -1; 
 		}
-	for (int i = 0; i < m_rows; i++){
-		for (int j = 0; j < m_cols; j++){
-			new_data[i * m_cols + j] = m->data[i * m_cols + j]*a->data[i * m_cols + j]+(1-m->data[i * m_cols + j])*b->data[i * m_cols + j];
-		}
-	}
+	/* Precedente: select aritmetico m*a + (1-m)*b.
+	 * Rimosso perché inf*0 = NaN contamina il risultato anche nel ramo non scelto.
+	 * Il ternario genera cmov con -O3, è branchless e corretto su inf/NaN. */
+	int nm = m_rows * m_cols;
+	#pragma omp parallel for schedule(static)
+	for (int i = 0; i < nm; i++)
+		new_data[i] = (m->data[i] != 0.0f) ? a->data[i] : b->data[i];
 	
 	coppia shape;
 	shape.row = m_rows;
@@ -594,6 +618,7 @@ int sum_arr (stack *my_stack){
 	if (arr == NULL) return -1;
 	int n = arr->shape.row * arr->shape.col;
 	float total = 0.0f;
+	#pragma omp parallel for reduction(+:total) schedule(static)
 	for (int i = 0; i < n; i++)
 		total += arr->data[i];
 	instance_free(arr);
@@ -644,10 +669,11 @@ int dot_product (stack *my_stack){
 	int n = a->shape.col;
 	float *sum = malloc(sizeof(float));
 	if (sum == NULL) { instance_free(a); instance_free(b); return -1; }
-	sum[0] = 0;
-
+	float dot = 0.0f;
+	#pragma omp parallel for reduction(+:dot) schedule(static)
 	for (int i = 0; i < n; i++)
-		sum[0] += a->data[i] * b->data[i];
+		dot += a->data[i] * b->data[i];
+	sum[0] = dot;
 
 	instance_free(a);
 	instance_free(b);
@@ -723,6 +749,7 @@ int convoluzione(stack *my_stack) {
     float *out = malloc(sizeof(float) * (size_t)(a_rows * a_cols));
     if (!out) { free(expanded_data); instance_free(k); instance_free(a); return -1; }
 
+    #pragma omp parallel for collapse(2) schedule(static)
     for (int i = 0; i < a_rows; i++) {
         for (int j = 0; j < a_cols; j++) {
             float *window = &expanded_data[i * col_padded + j];
@@ -757,58 +784,65 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
     return 1 + consumati;
 }
 
-
-/* Pops a filename string, reads a binary tensor file (disk_header format), normalises values
- * dividing by 255.0, and pushes the result on the stack.
+static void pgm_skip_comments (FILE *f){
+  int c;
+  while ((c = fgetc(f)) == '#') {
+    while((c = fgetc(f)) != '\n' && c != EOF) {}
+  }
+  ungetc(c, f);
+}
+/* Pops a filename string, reads a PGM P5 grayscale image, normalises pixel
+ * values to [0,1] dividing by 255, and pushes the result as a 2D tensor.
  * Input: my_stack — the stack (top: filename string).
  * Output: 0 on success, -1 on error. */
-/* TODO: questa funzione legge il formato binario disk_header, non PGM P5.
- * Va riscritta per leggere "P5\n width height\n255\n" + pixel uint8 → float/255. */
-static int read_image(stack *my_stack) {
-    stack_item item = stack_pop_item(my_stack);
-    if (item.type != ITEM_STRING) {
-        stack_free_item(item);
-        return -1;
-    }
-    char *path = item.filename;
-
-    FILE *f = fopen(path, "rb");
-    if (!f) { perror("fopen"); free(path); return -1; }
-
-    struct { int32_t shape[MAX_DIM]; int32_t ndim; off_t data_offset; } header;
-    if (fread(&header, sizeof(header), 1, f) != 1) { fclose(f); free(path); return -1; }
-
-    int32_t row = header.shape[0];
-    int32_t col = header.shape[1];
-    off_t offset = header.data_offset;
-
-    fseek(f, (long)offset, SEEK_SET);
-
-    float *new_data = malloc(sizeof(float) * (size_t)(row * col));
-    if (!new_data) { perror("malloc"); fclose(f); free(path); return -1; }
-
-    if (fread(new_data, sizeof(float), (size_t)(row * col), f) != (size_t)(row * col)) {
-        free(new_data); fclose(f); free(path); return -1;
-    }
-
-    coppia doppia = { .row = row, .col = col };
-    array_instance *new_inst = new_instance(new_data, doppia);
-    if (!new_inst) { free(new_data); fclose(f); free(path); return -1; }
-
-    int n = row * col;
-    for (int i = 0; i < n; i++)
-        new_inst->data[i] = new_inst->data[i] / 255.0f;
-
-    if (stack_push_instance(my_stack, new_inst) != 0) {
-        instance_free(new_inst);
-        fclose(f);
-        free(path);
-        return -1;
-    }
-    instance_free(new_inst);
-    fclose(f);
+static int read_image(stack *my_stack){
+  stack_item item = stack_pop_item(my_stack);
+  if (item.type != ITEM_STRING){
+    fprintf(stderr, "errore: expected string on top of stack\n");
+    stack_free_item(item);
+    return -1;
+  }
+  char *path = item.filename;
+  FILE *f = fopen(path, "rb");
+  if (!f){
+    perror("fopen");
     free(path);
-    return 0;
+    return -1;
+  }
+  free(path);
+
+  typedef struct { int width, height, maxval; } pgm_header;
+  pgm_header h;
+  char magic[3];
+  pgm_skip_comments(f);
+  if (fscanf(f, "%2s", magic) != 1 || magic[0] != 'P' || magic[1] != '5'){
+    fprintf(stderr, "read_image: formato non PGM P5\n");
+    fclose(f);
+    return -1;
+  }
+  pgm_skip_comments(f);
+  if (fscanf(f, " %d", &h.width) != 1){ perror("fscanf"); fclose(f); return -1; }
+  pgm_skip_comments(f);
+  if (fscanf(f, " %d", &h.height) != 1){ perror("fscanf"); fclose(f); return -1; }
+  pgm_skip_comments(f);
+  if (fscanf(f, " %d", &h.maxval) != 1){ perror("fscanf"); fclose(f); return -1; }
+  fgetc(f);
+
+  size_t n = (size_t)h.width * (size_t)h.height;
+  uint8_t *buf = malloc(n);
+  if (!buf){ perror("malloc"); fclose(f); return -1; }
+  if (fread(buf, 1, n, f) != n){ perror("fread"); free(buf); fclose(f); return -1; }
+
+  float *data = malloc(sizeof(float) * n);
+  if (!data){ perror("malloc"); free(buf); fclose(f); return -1; }
+  for (size_t i = 0; i < n; i++)
+    data[i] = (float)buf[i] / 255.0f;
+  free(buf);
+  fclose(f);
+
+  coppia shape = { h.height, h.width };
+  if (stack_push(my_stack, data, shape) != 0){ free(data); return -1; }
+  return 0;
 }
 
 /* Pops a filename string and a tensor, writes it as a PGM (P5) grayscale image.
@@ -856,6 +890,7 @@ int save_image(stack *my_stack) {
 }
 /* Pops a shape tensor (1D, 1 or 2 elements) and pushes a new tensor of that shape
  * filled with random floats in [0, 1).
+ * Validates dimensions >= 1 and product <= INT_MAX (entry point for user-supplied dims).
  * Input: my_stack — the stack (top: shape tensor [n] or [rows cols]).
  * Output: 0 on success, -1 on error. */
 int random_array(stack *my_stack) {
@@ -873,8 +908,17 @@ int random_array(stack *my_stack) {
 		instance_free(s);
 		return -1;
 	}
+	if (row < 1 || col < 1) {
+		fprintf(stderr, "errore: random_array richiede dimensioni >= 1\n");
+		instance_free(s); return -1;
+	}
 	instance_free(s);
-	int n = row * col;
+	int64_t n64 = (int64_t)row * (int64_t)col;
+	if (n64 > INT_MAX) {
+		fprintf(stderr, "errore: tensore troppo grande\n");
+		return -1;
+	}
+	int n = (int)n64;
 	float *arr = malloc(sizeof(float) * (size_t)n);
 	if (!arr) { perror("malloc"); return -1; }
 	for (int i = 0; i < n; i++)
@@ -894,6 +938,7 @@ int relu (stack *my_stack){
 	int n = a->shape.row * a->shape.col;
 	float *new_data = malloc(sizeof(float) * (size_t)n);
 	if (!new_data) { instance_free(a); return -1; }
+	#pragma omp parallel for schedule(static)
 	for (int i = 0; i < n; i++)
 		new_data[i] = (a->data[i] > 0.f) ? a->data[i] : 0.f;
 	coppia shape;
@@ -929,18 +974,15 @@ int extrema(stack *my_stack, char op){
 	int n = row * col;
 	float *new_data = malloc(sizeof(float) * (size_t)n);
 	if (!new_data) { instance_free(a); instance_free(b); return -1; }
+	/* Precedente: select aritmetico branchless x*cond + y*(1-cond).
+	 * Rimosso perché inf*0 = NaN contamina il risultato anche nel ramo non scelto.
+	 * fminf/fmaxf sono già branchless con -O3 e corretti su inf/NaN. */
 	if (op == 'm'){
-		for (int i = 0; i < n; i++){
-			/* branchless select: evita branch misprediction su dati non ordinati */
-			float cond = (float)(a->data[i] < b->data[i]);
-			new_data[i] = a->data[i] * cond + b->data[i] * (1.0f - cond);
-		}
+		for (int i = 0; i < n; i++)
+			new_data[i] = fminf(a->data[i], b->data[i]);
 	} else {
-		for (int i = 0; i < n; i++){
-			/* branchless select: evita branch misprediction su dati non ordinati */
-			float cond = (float)(a->data[i] > b->data[i]);
-			new_data[i] = a->data[i] * cond + b->data[i] * (1.0f - cond);
-		}
+		for (int i = 0; i < n; i++)
+			new_data[i] = fmaxf(a->data[i], b->data[i]);
 	}
 	instance_free(a);
 	instance_free(b);
@@ -1014,36 +1056,57 @@ int drop (stack *my_stack){
  * Input: my_stack — the stack.
  * Output: 0 on success, -1 on error. */
 int ravel(stack *my_stack) {
-	array_instance *a = stack_pop(my_stack);
-	if (!a) return -1;
-	a->shape.col = a->shape.row * a->shape.col;
-	a->shape.row = 1;
-	if (stack_push_instance(my_stack, a) != 0) {
-		instance_free(a);
-		return -1;
-	}
-	instance_free(a);
+  array_instance *a = stack_pop(my_stack);
+  if (!a) return -1;
+  if (a->ref_count == 1){
+    a->shape.col = a->shape.row * a->shape.col;
+    a->shape.row = 1;
+    if (stack_push_instance(my_stack, a) != 0) {
+      instance_free(a);
+      return -1;
+    }
+    instance_free(a);}
+  else{
+    int new_col = a->shape.row * a->shape.col;
+    float *new_data = malloc(sizeof(float) * (size_t)new_col);
+    memcpy(new_data, a->data, (size_t)new_col * sizeof(float));
+
+    coppia shape;
+    shape.row = 1;
+    shape.col = new_col;
+
+    instance_free(a);
+    if (stack_push(my_stack, new_data, shape) != 0) {
+      fprintf(stderr, "ravel: push_stack ha fallito");
+      free(new_data);
+      return -1;
+    }
+  }
 	return 0;
 }
 
 /* Pops a tensor and pushes a 1D tensor [1×2] containing its shape [rows, cols].
  * Input: my_stack — the stack.
  * Output: 0 on success, -1 on error. */
-/* TODO: per tensori 1D (shape.row == 1) restituire [ n ] (1 elemento), non [ 1 n ].
- * Attualmente restituisce sempre 2 elementi, rompendo ? r f quando usati dopo # su un 1D. */
 int op_shape(stack *my_stack) {
 	array_instance *a = stack_pop(my_stack);
 	if (!a) return -1;
-	float *shape_arr = malloc(sizeof(float) * 2);
+	int is_1d = (a->shape.row == 1);
+	int count = is_1d ? 1 : 2;
+	float *shape_arr = malloc(sizeof(float) * (size_t)count);
 	if (!shape_arr) {
 		perror("malloc");
 		instance_free(a);
 		return -1;
 	}
-	shape_arr[0] = (float)a->shape.row;
-	shape_arr[1] = (float)a->shape.col;
+	if (is_1d) {
+		shape_arr[0] = (float)a->shape.col;
+	} else {
+		shape_arr[0] = (float)a->shape.row;
+		shape_arr[1] = (float)a->shape.col;
+	}
 	instance_free(a);
-	coppia shape = {1, 2};
+	coppia shape = {1, count};
 	if (stack_push(my_stack, shape_arr, shape) != 0) {
 		free(shape_arr);
 		return -1;
@@ -1054,6 +1117,7 @@ int op_shape(stack *my_stack) {
 
 /* Pops a value tensor v (top) and a shape tensor s, pushes a new tensor of shape s
  * filled by cycling through the elements of v.
+ * Validates dimensions >= 1 and product <= INT_MAX (entry point for user-supplied dims).
  * Input: my_stack — the stack (top: v, then s).
  * Output: 0 on success, -1 on error. */
 int fill(stack *my_stack) {
@@ -1068,10 +1132,24 @@ int fill(stack *my_stack) {
 	}
 	int row = (s->shape.col == 2) ? (int)s->data[0] : 1;
 	int col = (s->shape.col == 2) ? (int)s->data[1] : (int)s->data[0];
+	if (row < 1 || col < 1) {
+		fprintf(stderr, "errore: fill richiede dimensioni >= 1\n");
+		instance_free(s); instance_free(v); return -1;
+	}
 	instance_free(s);
 
-	int n = row * col;
+	int64_t n64 = (int64_t)row * (int64_t)col;
+	if (n64 > INT_MAX) {
+		fprintf(stderr, "errore: tensore troppo grande\n");
+		instance_free(v); return -1;
+	}
+	int n = (int)n64;
 	int m = v->shape.row * v->shape.col;
+	if (m <= 0) {
+		fprintf(stderr, "fill: tensore valore non può essere vuoto\n");
+		instance_free(v);
+		return -1;
+	}
 	float *new_data = malloc(sizeof(float) * (size_t)n);
 	if (!new_data) { perror("malloc"); instance_free(v); return -1; }
 

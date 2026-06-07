@@ -1,5 +1,5 @@
 #!/bin/bash
-BINARY="./TensorForth"
+BINARY="./tensorforth"
 PASS=0
 FAIL=0
 
@@ -227,7 +227,7 @@ run_test "and su array non booleano" \
 run_test "mask su maschera non booleana" \
     fail \
     "[ 0.0 0.0 ] [ 1.0 2.0 ] [ 0.5 0.5 ] \$" \
-    "booleano"
+    "booleana"
 
 run_test "stack underflow su print" \
     fail \
@@ -288,7 +288,7 @@ run_test "ravel 1D rimane 1D" \
 run_test "shape di 1D" \
     pass \
     "[ 5.0 6.0 7.0 ] # p" \
-    "1.000000 3.000000"
+    "3.000000"
 
 run_test "shape di 2D" \
     pass \

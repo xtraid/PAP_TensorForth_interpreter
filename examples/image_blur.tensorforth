@@ -1,0 +1,1 @@
+"examples/cray-2.pgm" ( [ 5 5 ] [ 0.04 ] f c "examples/cray-2-blurred.pgm" )

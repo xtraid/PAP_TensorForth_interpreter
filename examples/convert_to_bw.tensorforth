@@ -1,0 +1,1 @@
+"examples/cray-2.pgm" ( d # [ 0.4 ] f < "examples/cray-2-bw.pgm" )

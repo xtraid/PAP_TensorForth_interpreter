@@ -15,16 +15,16 @@ else
 	CFLAGS = -O3 -funroll-loops ${BASE_FLAGS}
 endif
 
-all:TensorForth
+all:tensorforth
 
 %.o: %.c ${HEADERS}
 	${CC} ${CFLAGS} -c $<
 
-TensorForth: ${OBJ}
-	${CC} ${CFLAGS} -o $@ $^
-	
+tensorforth: ${OBJ}
+	${CC} ${CFLAGS} -o $@ $^ -lm
+
 .PHONY: all clean
 
 clean:
 	rm -f ${OBJ}
-	rm -f TensorForth
+	rm -f tensorforth

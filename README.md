@@ -17,12 +17,12 @@ make PERF=1       # performance build (-O3 -march=native -ffast-math -funroll-lo
 make clean        # remove build artifacts
 ```
 
-This produces a `TensorForth` executable.
+This produces a `tensorforth` executable.
 
 ## Usage
 
 ```sh
-./TensorForth <script.tensorforth>
+./tensorforth <script.tensorforth>
 ./run_tests.sh            # run the test suite (65 tests)
 ./run_tests.sh --valgrind # run with valgrind leak check
 ```
@@ -71,8 +71,8 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `S` | sum | `(a -- s)` | Sum all elements, push result as `[1×1]` tensor |
 | `.` | dot product | `(a b -- d)` | Dot product of two row vectors, push result as `[1×1]` tensor |
 | `"…"` | push string | `( -- s)` | Push the filename literal `…` onto the stack as a string item |
-| `(` | load tensor | `(s -- a)` | Pop filename string, read binary `.bin` file, push resulting tensor |
-| `)` | save tensor | `(a s -- )` | Pop filename string and tensor, write PGM (P5) file; values clamped to `[0, 1]` then scaled to `[0, 255]` |
+| `(` | load image | `(s -- a)` | Pop filename string, read PGM P5 greyscale image, push tensor with values in `[0, 1]` |
+| `)` | save image | `(a s -- )` | Pop filename string and tensor, write PGM P5 file; values clamped to `[0, 1]` then scaled to `[0, 255]` |
 | `?` | random | `(shape -- a)` | Pop shape tensor (`[1×1]` or `[1×2]`), push tensor filled with uniform random floats in `[0, 1)` |
 | `R` | relu | `(a -- relu(a))` | Element-wise ReLU: `max(0, x)` for each element |
 | `m` | min | `(a b -- min(a,b))` | Element-wise minimum of two tensors |
@@ -81,7 +81,7 @@ Stack notation: leftmost item is TOS (top of stack), rightmost is bottom.
 | `o` | over | `(a b -- b a b)` | Copy the second-from-top item to the top of the stack |
 | `D` | drop | `(a -- )` | Discard and free the top stack item |
 | `_` | ravel | `(a -- a')` | Flatten tensor to a 1D row vector: `[r×c] → [1×(r*c)]` |
-| `#` | shape | `(a -- s)` | Pop tensor, push its shape as a `[1×2]` tensor `[rows cols]` |
+| `#` | shape | `(a -- s)` | Pop tensor, push its shape: `[n]` for 1D (1×1 tensor), `[rows cols]` for 2D (1×2 tensor) |
 | `f` | fill | `(v s -- r)` | Pop shape `s` and value tensor `v`, push new tensor of shape `s` filled by cycling `v`'s elements |
 | `}` | save disk | `(a f -- )` | Pop filename string `f` and tensor `a`, serialise to binary file (disk format) |
 | `{` | load disk | `(f -- a)` | Pop filename string `f`, map file into memory with `mmap` (no copy), push tensor |
@@ -137,14 +137,9 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 [ 1.0 2.0 3.0 4.0 5.0 ] S p
 ```
 
-**Load a tensor from a binary file:**
-```
-"tests/test_tensor.bin" ( p
-```
-
 **Generate a random 3×4 matrix and save as PGM:**
 ```
-[ 3 4 ] ? "output.pgm" )
+[ 3.0 4.0 ] ? "output.pgm" )
 ```
 
 **ReLU on a vector:**
@@ -167,8 +162,8 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 
 **Shape inspection and ravel:**
 ```
-[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r # shape P   # prints shape [2 3]
-[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r _ p          # ravel to [1×6]
+[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r # p   # prints shape [2 3]
+[ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r _ p   # ravel to [1×6]
 ```
 
 **Fill a tensor with a repeating pattern:**
@@ -182,19 +177,16 @@ Result: `[10.0, 50.0, 30.0]` — where mask=1, takes from `a`; where mask=0, tak
 "out.bin" { p
 ```
 
-**Image blur pipeline (512×512, ~126ms on -O0):**
+**Image blur pipeline (reads a PGM, applies 5×5 box blur, writes result):**
 ```
-[ 512.0 512.0 ] ? "img.bin" }
-"img.bin" { [ 5.0 5.0 ] [ 0.04 ] f c "blurred.pgm" )
+"examples/cray-2.pgm" ( [ 5.0 5.0 ] [ 0.04 ] f c "examples/cray-2-blurred.pgm" )
 ```
 
 Step-by-step:
-1. `[ 512.0 512.0 ] ?` — generate random 512×512 matrix (simulated grayscale image)
-2. `"img.bin" }` — serialise to binary tensor file on disk
-3. `"img.bin" {` — map file into memory via `mmap` (zero-copy read)
-4. `[ 5.0 5.0 ] [ 0.04 ] f` — build 5×5 uniform blur kernel (each weight = 0.04, sum = 1.0)
-5. `c` — apply 2D convolution with zero-padding; output same size as input
-6. `"blurred.pgm" )` — write result as PGM P5 greyscale image (values clamped to [0,1] → [0,255])
+1. `"examples/cray-2.pgm" (` — read PGM P5 greyscale image; pixel values normalised to `[0, 1]`
+2. `[ 5.0 5.0 ] [ 0.04 ] f` — build 5×5 uniform blur kernel (each weight = 0.04, sum = 1.0)
+3. `c` — apply 2D convolution with zero-padding; output same shape as input
+4. `"examples/cray-2-blurred.pgm" )` — write result as PGM P5 (values clamped to `[0, 1]` → `[0, 255]`)
 
 ---
 
@@ -253,16 +245,13 @@ Float data starts at `data_offset` (byte 64) and contains `rows * cols` IEEE 754
 ├── reader.c / reader.h       # File I/O utilities
 ├── Makefile
 ├── run_tests.sh              # Test suite (65 tests, supports --valgrind)
-├── examples/                 # Sample .tensorforth scripts
-│   ├── example.tensorforth
-│   ├── random_matmul.tensorforth
-│   ├── test_complex.tensorforth
-│   ├── test_random.tensorforth       # random vector/matrix generation
-│   ├── test_random_image.tensorforth # generate and save PGM
-│   ├── test_leak.tensorforth         # stress test for all opcodes
-│   └── conv_pipeline.tensorforth    # blur pipeline: random 512×512 → mmap → conv 5×5 → PGM
-└── tests/                    # Test data files
-    ├── test_tensor.bin
-    ├── test_load.tensorforth
-    └── cray-2.pgm
+└── examples/
+    ├── cray-2.pgm                   # Sample greyscale image (PGM P5)
+    ├── image_blur.tensorforth       # 5×5 box blur on cray-2.pgm
+    ├── detect_edges.tensorforth     # Laplacian edge detection on cray-2.pgm
+    ├── convert_to_bw.tensorforth    # Threshold to black & white
+    ├── random_matmul.tensorforth    # Random matrix multiplication example
+    ├── save_tensor.tensorforth      # Save/load roundtrip via binary disk format
+    ├── duplicate.tensorforth        # Stack duplication example
+    └── game_of_life.tensorforth     # Conway's Game of Life step (1000×1000)
 ```

@@ -1,0 +1,8 @@
+[ 1000 1000 ] [ 0.5 ] f [ 1000 1000 ] ? > d
+"examples/gol_initial_state.pgm" )
+[ 1 1 1 1 0 1 1 1 1 ] [ 3 3 ] r o s c d
+[ 1000 1000 ] [ 3 ] f = s 
+[ 1000 1000 ] [ 2 ] f = | o & s
+[ 1 1 1 1 0 1 1 1 1 ] [ 3 3 ] r c
+[ 1000 1000 ] [ 3 ] f = |
+"examples/gol_next_state.pgm" )

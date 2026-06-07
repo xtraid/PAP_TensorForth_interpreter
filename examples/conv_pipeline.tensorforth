@@ -1,2 +1,0 @@
-[ 512.0 512.0 ] ? "examples/img_input.bin" }
-"examples/img_input.bin" { [ 5.0 5.0 ] [ 0.04 ] f c "examples/img_blurred.pgm" )
