@@ -66,7 +66,7 @@ int read_image(stack *my_stack){
   free(buf);
   fclose(f);
 
-  shape_t shape = { h.height, h.width };
+  shape_t shape = { h.height, h.width, 2};
   if (stack_push(my_stack, data, shape) != 0){ free(data); return TF_ERR_MEM; }
   return TF_OK;
 }
@@ -139,6 +139,7 @@ int random_array(stack *my_stack) {
 		fprintf(stderr, "error: '?' requires dimensions >= 1\n");
 		instance_free(s); return TF_ERR_ARG;
 	}
+	int ndim = s->shape.col;
 	instance_free(s);
 	int64_t n64 = (int64_t)row * (int64_t)col;
 	if (n64 > INT_MAX) {
@@ -150,7 +151,7 @@ int random_array(stack *my_stack) {
 	if (!arr) { perror("malloc"); return TF_ERR_MEM; }
 	for (int i = 0; i < n; i++)
 		arr[i] = (float)rand() / (float)RAND_MAX;
-	shape_t shape = {row, col};
+	shape_t shape = {row, col, ndim};
 	if (stack_push(my_stack, arr, shape) != 0) { free(arr); return TF_ERR_MEM; }
 	return TF_OK;
 }
@@ -247,7 +248,7 @@ int on_disk_read(stack *my_stack) {
 	if (map == MAP_FAILED) { perror("mmap"); free(path); return TF_ERR_IO; }
 
 	float *src = (float *)((char *)map + hdr.data_offset);
-	shape_t shape = { hdr.shape[0], hdr.shape[1] };
+	shape_t shape = { hdr.shape[0], hdr.shape[1], hdr.ndim };
 	array_instance *inst = new_instance(src, shape);
 	if (!inst) { munmap(map, (size_t)st.st_size); free(path); return TF_ERR_MEM; }
 	inst->on_disk = 1;

@@ -54,6 +54,7 @@ int algebra (stack *my_stack, char op) {
 	shape_t shape;
 	shape.row = rows;
 	shape.col = cols;
+	shape.ndim = a->shape.ndim;
 
 	instance_free(a);
 	instance_free(b);
@@ -109,6 +110,7 @@ int comparisons (stack *my_stack, char op) {
 	shape_t shape;
 	shape.row = rows;
 	shape.col = cols;
+	shape.ndim = a->shape.ndim;
 
 	instance_free(a);
 	instance_free(b);
@@ -158,6 +160,7 @@ int logical_binary (stack *my_stack, char op) {
 	shape_t shape;
 	shape.row = rows;
 	shape.col = cols;
+	shape.ndim = a->shape.ndim;
 
 	instance_free(a);
 	instance_free(b);
@@ -191,6 +194,7 @@ int op_not (stack *my_stack){
 	shape_t shape;
 	shape.row = rows;
 	shape.col = cols;
+	shape.ndim = a->shape.ndim;
 	instance_free(a);
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return TF_ERR_MEM; }
 	return TF_OK;
@@ -241,7 +245,7 @@ int mask (stack *my_stack) {
 	for (int i = 0; i < nm; i++)
 		new_data[i] = (m->data[i] != 0.0f) ? a->data[i] : b->data[i];
 
-	shape_t shape = {m_rows, m_cols};
+	shape_t shape = {m_rows, m_cols, a->shape.ndim};
 	int push_err = stack_push(my_stack, new_data, shape);
 	if (push_err != 0) free(new_data);
 	instance_free(m);
@@ -267,6 +271,7 @@ int extrema(stack *my_stack, char op){
 	}
 	int row = a->shape.row;
 	int col = a->shape.col;
+	int ndim = a->shape.ndim;
 	int n = row * col;
 	float *new_data = malloc(sizeof(float) * (size_t)n);
 	if (!new_data) { instance_free(a); instance_free(b); return TF_ERR_MEM; }
@@ -280,7 +285,7 @@ int extrema(stack *my_stack, char op){
 	}
 	instance_free(a);
 	instance_free(b);
-	shape_t shape = {row, col};
+	shape_t shape = {row, col, ndim};
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return TF_ERR_MEM; }
 	return TF_OK;
 }
@@ -297,7 +302,7 @@ int relu (stack *my_stack){
 	#pragma omp parallel for schedule(static)
 	for (int i = 0; i < n; i++)
 		new_data[i] = (a->data[i] > 0.f) ? a->data[i] : 0.f;
-	shape_t shape = {a->shape.row, a->shape.col};
+	shape_t shape = {a->shape.row, a->shape.col, a->shape.ndim};
 	instance_free(a);
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return TF_ERR_MEM; }
 	return TF_OK;

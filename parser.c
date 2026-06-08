@@ -76,18 +76,16 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 	int consumati = 0;
 	long tmp = offset;
 
-	/* prima passata: valida la sintassi e conta gli elementi */
+	/* prima passata: valida la sintassi e conta gli elementi.
+	 * Gli elementi sono separati da uno o più spazi: dopo '[' e dopo ogni valore
+	 * si saltano tutti gli spazi consecutivi (spec: separatore = spazi). */
 	if (s[tmp] != ' ') {
 		fprintf(stderr, "error: missing space after '['\n");
 		return -1;
 	}
-	tmp++;
+	while (s[tmp] == ' ') tmp++;
 
 	while (s[tmp] != '\0' && s[tmp] != ']') {
-		if (s[tmp] == ' ') {
-			fprintf(stderr, "error: double space at position %ld\n", tmp - start);
-			return -1;
-		}
 		float val;
 		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) {
 			if (s[tmp + consumati] != ' ') {
@@ -98,7 +96,8 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 				return -1;
 			}
 			count++;
-			tmp += consumati + 1;
+			tmp += consumati;
+			while (s[tmp] == ' ') tmp++;
 		} else {
 			if (isprint((unsigned char)s[tmp]))
 				fprintf(stderr, "error: invalid token '%c' at position %ld\n", s[tmp], tmp - start);
@@ -121,17 +120,19 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 	}
 
 	/* seconda passata: alloca esattamente `count` elementi e riempie.
-	 * Il doppio scan è deliberato: la prima passata conta gli elementi per evitare
-	 * realloc su array di dimensione arbitraria. */
+	 * Usa la stessa scansione della prima passata (skip degli spazi multipli)
+	 * per restare allineata sul numero di elementi contati. */
 	float *new_array = malloc(sizeof(float) * (size_t)count);
 	if (new_array == NULL) return -1;
 
-	offset++;  /* salta lo spazio iniziale dopo '[' */
+	tmp = offset;
+	while (s[tmp] == ' ') tmp++;  /* salta gli spazi dopo '[' */
 	for (int j = 0; j < count; j++) {
 		float val;
-		if (sscanf(s + offset, "%f%n", &val, &consumati) == 1) {
+		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) {
 			new_array[j] = val;
-			offset += consumati + 1;
+			tmp += consumati;
+			while (s[tmp] == ' ') tmp++;
 		} else {
 			free(new_array);
 			return -1;
@@ -141,6 +142,7 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 	shape_t shape;
 	shape.row = 1;
 	shape.col = count;
+  shape.ndim = 1;
 
 	if (stack_push(my_stack, new_array, shape) != 0) {
 		free(new_array);
@@ -177,20 +179,16 @@ int parser(const char *s, stack *my_stack){
 	                    s[size-1] == '\t' || s[size-1] == '\r'))
 		size--;
 
-	/* BEFORE_FIRST=0: leading spaces OK; NEED_SEP=1: must see one space;
-	 * SEP_DONE=2: space consumed, next char must be a token */
+	/* BEFORE_FIRST=0: leading spaces OK; NEED_SEP=1: must see one space; */
+	
 	int sep_state = 0;
 
 	for (long i = 0; i < size; i++){
 		int is_ws = (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r');
 
 		if (is_ws) {
-			if      (sep_state == 1) sep_state = 2;
-			else if (sep_state == 2) {
-				fprintf(stderr, "error: extra space at position %ld\n", i);
-				return TF_ERR_SYNTAX;
-			}
-			continue;
+			if (sep_state == 1) sep_state = 2;
+      continue;
 		}
 
 		if (sep_state == 1) {

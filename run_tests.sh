@@ -46,7 +46,7 @@ echo "=== TEST VALIDI ==================================================="
 run_test "push e print base" \
     pass \
     "[ 1.0 2.0 3.0 ] p" \
-    "Tensor(shape=[1 3]"
+    "Tensor(shape=[3]"
 
 run_test "addizione element-wise" \
     pass \
@@ -136,7 +136,7 @@ run_test "array singolo elemento" \
 run_test "reshape 1D (shape a 1 elemento)" \
     pass \
     "[ 1.0 2.0 3.0 ] [ 3.0 ] r p" \
-    "Tensor(shape=[1 3]"
+    "Tensor(shape=[3]"
 
 run_test "reshape 1x6 a 2x3" \
     pass \
@@ -161,10 +161,10 @@ run_test "manca spazio prima di ]" \
     "[ 1.0 2.0]" \
     "missing space before"
 
-run_test "spazio doppio tra elementi" \
-    fail \
-    "[ 1.0  2.0 ]" \
-    "double space"
+run_test "spazi multipli tra elementi (validi, BB1)" \
+    pass \
+    "[ 1.0  2.0 ] p" \
+    "Tensor(shape=[2]"
 
 run_test "token non valido (lettera)" \
     fail \
@@ -283,12 +283,12 @@ echo "=== TEST RAVEL / SHAPE ==========================================="
 run_test "ravel 2D -> 1D" \
     pass \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r _ p" \
-    "Tensor(shape=[1 4]"
+    "Tensor(shape=[4]"
 
 run_test "ravel 1D rimane 1D" \
     pass \
     "[ 1.0 2.0 3.0 ] _ p" \
-    "Tensor(shape=[1 3]"
+    "Tensor(shape=[3]"
 
 run_test "ravel aliasing: d _ non muta shape originale" \
     pass \
@@ -321,7 +321,7 @@ run_test "fill 1D" \
 run_test "random shape 1D" \
     pass \
     "[ 5.0 ] ? p" \
-    "Tensor(shape=[1 5]"
+    "Tensor(shape=[5]"
 
 run_test "random shape 2D" \
     pass \

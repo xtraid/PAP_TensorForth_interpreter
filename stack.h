@@ -34,6 +34,7 @@ typedef struct {
 typedef struct {
 	int32_t row;
 	int32_t col;
+  int32_t ndim;
 } shape_t;
 
 	

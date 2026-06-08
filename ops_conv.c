@@ -80,7 +80,7 @@ int convoluzione(stack *my_stack) {
     instance_free(k);
     instance_free(a);
 
-    shape_t shape = {a_rows, a_cols};
+    shape_t shape = {a_rows, a_cols, 2};
     if (stack_push(my_stack, out, shape) != 0) { free(out); return TF_ERR_MEM; }
     return TF_OK;
 }

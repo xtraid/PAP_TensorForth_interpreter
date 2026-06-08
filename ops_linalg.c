@@ -67,9 +67,9 @@ int mat_mat_mul(stack *my_stack){
 	int b_rows = b->shape.row;
 	int b_cols = b->shape.col;
 
-	if (a_rows < 2 || b_rows < 2) {
-		fprintf(stderr, "error: '@' requires 2D matrices, not row vectors (a[%d %d] b[%d %d])\n",
-			a_rows, a_cols, b_rows, b_cols);
+	if (a->shape.ndim != 2 || b->shape.ndim != 2) {
+		fprintf(stderr, "error: '@' requires 2D matrices (a is %dD, b is %dD)\n",
+			a->shape.ndim, b->shape.ndim);
 		instance_free(a);
 		instance_free(b);
 		return TF_ERR_ARG;
@@ -95,7 +95,7 @@ int mat_mat_mul(stack *my_stack){
 	free(b_T);
 	instance_free(a);
 	instance_free(b);
-	shape_t shape = {a_rows, b_cols};
+	shape_t shape = {a_rows, b_cols, 2};
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return TF_ERR_MEM; }
 	return TF_OK;
 }
@@ -117,7 +117,7 @@ int sum_arr (stack *my_stack){
 	if (sum == NULL) return TF_ERR_MEM;
 	sum[0] = total;
 
-	shape_t shape = {1, 1};
+	shape_t shape = {1, 1, 1};
 	if (stack_push(my_stack, sum, shape) != 0) { free(sum); return TF_ERR_MEM; }
 	return TF_OK;
 }
@@ -164,7 +164,7 @@ int dot_product (stack *my_stack){
 	instance_free(a);
 	instance_free(b);
 
-	shape_t shape = {1, 1};
+	shape_t shape = {1, 1, 1};
 	if (stack_push(my_stack, sum, shape) != 0) { free(sum); return TF_ERR_MEM; }
 	return TF_OK;
 }

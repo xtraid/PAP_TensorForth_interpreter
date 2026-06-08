@@ -40,13 +40,14 @@ int op_reshape(stack *my_stack){
 		instance_free(a);
 		return TF_ERR_SHAPE;
 	}
+	int ndim = s->shape.col;
 	instance_free(s);
 	int n = new_rows * new_cols;
 	float *new_data = malloc(sizeof(float) * (size_t)n);
 	if (!new_data) { instance_free(a); return TF_ERR_MEM; }
 	memcpy(new_data, a->data, sizeof(float) * (size_t)n);
 	instance_free(a);
-	shape_t shape = {new_rows, new_cols};
+	shape_t shape = {new_rows, new_cols, ndim};
 	if (stack_push(my_stack, new_data, shape) != 0) { free(new_data); return TF_ERR_MEM; }
 	return TF_OK;
 }
@@ -64,7 +65,10 @@ int pop_print(stack *my_stack){
 	int cols      = last->shape.col;
 	float *data   = last->data;
 	int total = rows * cols;
-	printf("Tensor(shape=[%d %d], data=[", rows, cols);
+	if (last->shape.ndim == 1)
+		printf("Tensor(shape=[%d], data=[", cols);
+	else
+		printf("Tensor(shape=[%d %d], data=[", rows, cols);
 	for (int i = 0; i < total; i++){
 		printf("%f", data[i]);
 		if (i < total - 1) printf(" ");
@@ -177,7 +181,8 @@ int ravel(stack *my_stack) {
 	if (a->ref_count == 1){
 		a->shape.col = a->shape.row * a->shape.col;
 		a->shape.row = 1;
-		if (stack_push_instance(my_stack, a) != 0) {
+		a->shape.ndim = 1;
+    if (stack_push_instance(my_stack, a) != 0) {
 			instance_free(a);
 			return TF_ERR_MEM;
 		}
@@ -188,7 +193,7 @@ int ravel(stack *my_stack) {
 		if (!new_data) { instance_free(a); return TF_ERR_MEM; }
 		memcpy(new_data, a->data, (size_t)new_col * sizeof(float));
 
-		shape_t shape = {1, new_col};
+		shape_t shape = {1, new_col, 1};
 		instance_free(a);
 		if (stack_push(my_stack, new_data, shape) != 0) {
 			fprintf(stderr, "error: '_': stack push failed\n");
@@ -206,7 +211,7 @@ int ravel(stack *my_stack) {
 int op_shape(stack *my_stack) {
 	array_instance *a = stack_pop(my_stack);
 	if (!a) return TF_ERR_STACK;
-	int is_1d = (a->shape.row == 1);
+	int is_1d = (a->shape.ndim == 1);
 	int count = is_1d ? 1 : 2;
 	float *shape_arr = malloc(sizeof(float) * (size_t)count);
 	if (!shape_arr) {
@@ -220,7 +225,7 @@ int op_shape(stack *my_stack) {
 		shape_arr[1] = (float)a->shape.col;
 	}
 	instance_free(a);
-	shape_t shape = {1, count};
+	shape_t shape = {1, count, 1};
 	if (stack_push(my_stack, shape_arr, shape) != 0) {
 		free(shape_arr);
 		return TF_ERR_MEM;
@@ -250,6 +255,7 @@ int fill(stack *my_stack) {
 		fprintf(stderr, "error: 'f' requires dimensions >= 1\n");
 		instance_free(s); instance_free(v); return TF_ERR_ARG;
 	}
+	int ndim = s->shape.col;
 	instance_free(s);
 
 	int64_t n64 = (int64_t)row * (int64_t)col;
@@ -271,7 +277,7 @@ int fill(stack *my_stack) {
 		new_data[i] = v->data[i % m];
 
 	instance_free(v);
-	shape_t shape = {row, col};
+	shape_t shape = {row, col, ndim};
 	if (stack_push(my_stack, new_data, shape) != 0) {
 		free(new_data);
 		return TF_ERR_MEM;
