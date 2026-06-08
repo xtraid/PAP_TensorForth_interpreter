@@ -71,7 +71,7 @@ int duplicate (stack *my_stack);
 
 int algebra (stack *my_stack, char op);
 
-int op_logiche_2_arg (stack *my_stack, char op);
+int logical_binary (stack *my_stack, char op);
 
 int op_not (stack *my_stack);
 
@@ -81,7 +81,7 @@ int mat_mat_mul(stack *my_stack);
 
 int op_reshape(stack *my_stack);
 
-int disuguaglianze(stack *my_stack, char op);
+int comparisons(stack *my_stack, char op);
 
 int sum_arr(stack *my_stack);
 

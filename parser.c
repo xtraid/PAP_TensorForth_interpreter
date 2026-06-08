@@ -78,45 +78,45 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 
 	/* prima passata: valida la sintassi e conta gli elementi */
 	if (s[tmp] != ' ') {
-		fprintf(stderr, "errore: manca lo spazio obbligatorio dopo '['\n");
+		fprintf(stderr, "error: missing space after '['\n");
 		return -1;
 	}
 	tmp++;
 
 	while (s[tmp] != '\0' && s[tmp] != ']') {
 		if (s[tmp] == ' ') {
-			fprintf(stderr, "errore: spazio doppio alla posizione %ld\n", tmp - start);
+			fprintf(stderr, "error: double space at position %ld\n", tmp - start);
 			return -1;
 		}
 		float val;
 		if (sscanf(s + tmp, "%f%n", &val, &consumati) == 1) {
 			if (s[tmp + consumati] != ' ') {
 				if (s[tmp + consumati] == ']')
-					fprintf(stderr, "errore: manca lo spazio obbligatorio prima di ']'\n");
+					fprintf(stderr, "error: missing space before ']'\n");
 				else
-					fprintf(stderr, "errore: manca lo spazio dopo il valore %g\n", val);
+					fprintf(stderr, "error: missing space after value %g\n", val);
 				return -1;
 			}
 			count++;
 			tmp += consumati + 1;
 		} else {
 			if (isprint((unsigned char)s[tmp]))
-				fprintf(stderr, "errore: token non valido '%c' alla posizione %ld\n", s[tmp], tmp - start);
+				fprintf(stderr, "error: invalid token '%c' at position %ld\n", s[tmp], tmp - start);
 			else
-				fprintf(stderr, "errore: token non valido '\\x%02x' alla posizione %ld\n", (unsigned char)s[tmp], tmp - start);
+				fprintf(stderr, "error: invalid byte '\\x%02x' at position %ld\n", (unsigned char)s[tmp], tmp - start);
 			return -1;
 		}
 	}
 
 	if (s[tmp] == '\0') {
-		fprintf(stderr, "errore: manca la chiusura ']'\n");
+		fprintf(stderr, "error: missing closing ']'\n");
 		return -1;
 	}
 
 	long end = tmp;  /* posizione di ']' */
 
 	if (count == 0) {
-		fprintf(stderr, "errore: array vuoto '[ ]' non supportato\n");
+		fprintf(stderr, "error: empty array '[ ]' is not supported\n");
 		return -1;
 	}
 
@@ -138,7 +138,7 @@ static long parse_array(const char *s, long offset, stack *my_stack){
 		}
 	}
 
-	coppia shape;
+	shape_t shape;
 	shape.row = 1;
 	shape.col = count;
 
@@ -158,7 +158,7 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
     char buf[256];
     sscanf(s + offset, "%255[^\"]%n", buf, &consumati);
     if (consumati == 0 || s[offset + consumati] != '"') {
-        fprintf(stderr, "errore: stringa malformata\n");
+        fprintf(stderr, "error: malformed string literal\n");
         return -1;
     }
     if (stack_push_string(my_stack, buf) != 0) return -1;
@@ -168,7 +168,7 @@ static long parse_string(const char *s, long offset, stack *my_stack) {
 /* Main interpreter loop. Scans s token by token and dispatches each command.
  * Enforces exactly one whitespace separator between consecutive tokens.
  * Input: s — null-terminated script string, my_stack — the execution stack.
- * Output: 0 on success, -1 on error. */
+ * Output: TF_OK on success, TFError code on error. */
 int parser(const char *s, stack *my_stack){
 	long size = (long)strlen(s);
 
@@ -187,88 +187,70 @@ int parser(const char *s, stack *my_stack){
 		if (is_ws) {
 			if      (sep_state == 1) sep_state = 2;
 			else if (sep_state == 2) {
-				fprintf(stderr, "errore: spazio extra alla posizione %ld\n", i);
-				return -1;
+				fprintf(stderr, "error: extra space at position %ld\n", i);
+				return TF_ERR_SYNTAX;
 			}
 			continue;
 		}
 
 		if (sep_state == 1) {
-			fprintf(stderr, "errore: manca spazio tra i token alla posizione %ld\n", i);
-			return -1;
+			fprintf(stderr, "error: missing space between tokens at position %ld\n", i);
+			return TF_ERR_SYNTAX;
 		}
 
 		char token[2] = {s[i], '\0'};
- 		switch(lookup(token)){
+		switch(lookup(token)){
 
 			case OP_NEW_ARRAY:{
 				long result = parse_array(s, i+1, my_stack);
-				if (result == -1) return -1;
-					i += result;
+				if (result == -1) return TF_ERR_SYNTAX;
+				i += result;
 				break;}
-			case OP_PRINT_N_POP: if (pop_print(my_stack) != 0) return -1; break;
-			case OP_PRINT_MATRIX: if (pop_print_as_matrix(my_stack) != 0) return -1; break;
-			case OP_DUPLICATE: if (duplicate(my_stack) != 0) return -1; break;
-			case OP_ADD: if (algebra(my_stack, 'a') != 0) return -1; break;
-			case OP_SUBTRACTION: if (algebra(my_stack, 's') != 0) return -1; break;
-			case OP_PRODUCT: if (algebra(my_stack, 'p') != 0) return -1; break;
-			case OP_GREATER: if (disuguaglianze(my_stack, 'M') != 0) return -1; break;
-			case OP_LESSER: if (disuguaglianze(my_stack, 'm') != 0) return -1; break;
-			case OP_CONFRONT: if (disuguaglianze(my_stack, 'u') != 0) return -1; break;
-			case OP_AND:{int err = op_logiche_2_arg(my_stack, 'a');
-				if (err != 0) return err;
-				break;
-				}
-			case OP_OR:{int err = op_logiche_2_arg(my_stack, 'o');
-				if (err != 0) return err;
-				break;
-				}
-			case OP_NOT:{int err = op_not(my_stack);
-				if (err != 0) return err;
-				break;
-				}
-			case OP_MASK:{int err = mask(my_stack);
-				if (err != 0) return err;
-				break;
-				}
-			case OP_MAT_MUL:{int err = mat_mat_mul(my_stack);
-				if (err != 0) return err;
-				break;
-				}
-			case OP_RESHAPE:{int err = op_reshape(my_stack);
-				if (err != 0) return err;
-				break;
-				}
-			case OP_SUM: if (sum_arr(my_stack) != 0) return -1; break;
-			case OP_DOT: if (dot_product(my_stack) != 0) return -1; break;
 			case OP_READ_NAME:{
 				long result = parse_string(s, i+1, my_stack);
-				if (result == -1) return -1;
-					i += result;
+				if (result == -1) return TF_ERR_SYNTAX;
+				i += result;
 				break;}
 
-			case OP_LOAD_PGM: if (read_image(my_stack) != 0) return -1; break;
-			case OP_SAVE_PGM: if (save_image(my_stack) != 0) return -1; break;
-			case OP_RANDOM: if (random_array(my_stack) != 0) return -1; break;
-			case OP_RELU: if (relu(my_stack) != 0) return -1; break;
-			case OP_MIN: if (extrema(my_stack, 'm') != 0) return -1; break;
-			case OP_MAX: if (extrema(my_stack, 'M') != 0) return -1; break;
-			case OP_SWITCH: if (op_switch(my_stack) != 0) return -1; break;
-			case OP_OVER: if (over(my_stack) != 0) return -1; break;
-			case OP_DROP: if (drop(my_stack) != 0) return -1; break;
-			case OP_RAVEL: if (ravel(my_stack) != 0) return -1; break;
-			case OP_SHAPE: if (op_shape(my_stack) != 0) return -1; break;
-			case OP_FILL: if (fill(my_stack) != 0) return -1; break;
-			case OP_SAVE_DISK: if (on_disk_save(my_stack) != 0) return -1; break;
-			case OP_LOAD_DISK: if (on_disk_read(my_stack) != 0) return -1; break;
-			case OP_CONV: if (convoluzione(my_stack) != 0) return -1; break;
+			case OP_PRINT_N_POP:  { int e = pop_print(my_stack);              if (e) return e; break; }
+			case OP_PRINT_MATRIX: { int e = pop_print_as_matrix(my_stack);    if (e) return e; break; }
+			case OP_DUPLICATE:    { int e = duplicate(my_stack);               if (e) return e; break; }
+			case OP_ADD:          { int e = algebra(my_stack, 'a');            if (e) return e; break; }
+			case OP_SUBTRACTION:  { int e = algebra(my_stack, 's');            if (e) return e; break; }
+			case OP_PRODUCT:      { int e = algebra(my_stack, 'p');            if (e) return e; break; }
+			case OP_GREATER:      { int e = comparisons(my_stack, 'M');     if (e) return e; break; }
+			case OP_LESSER:       { int e = comparisons(my_stack, 'm');     if (e) return e; break; }
+			case OP_CONFRONT:     { int e = comparisons(my_stack, 'u');     if (e) return e; break; }
+			case OP_AND:          { int e = logical_binary(my_stack, 'a');   if (e) return e; break; }
+			case OP_OR:           { int e = logical_binary(my_stack, 'o');   if (e) return e; break; }
+			case OP_NOT:          { int e = op_not(my_stack);                  if (e) return e; break; }
+			case OP_MASK:         { int e = mask(my_stack);                    if (e) return e; break; }
+			case OP_MAT_MUL:      { int e = mat_mat_mul(my_stack);             if (e) return e; break; }
+			case OP_RESHAPE:      { int e = op_reshape(my_stack);              if (e) return e; break; }
+			case OP_SUM:          { int e = sum_arr(my_stack);                 if (e) return e; break; }
+			case OP_DOT:          { int e = dot_product(my_stack);             if (e) return e; break; }
+			case OP_LOAD_PGM:     { int e = read_image(my_stack);              if (e) return e; break; }
+			case OP_SAVE_PGM:     { int e = save_image(my_stack);              if (e) return e; break; }
+			case OP_RANDOM:       { int e = random_array(my_stack);            if (e) return e; break; }
+			case OP_RELU:         { int e = relu(my_stack);                    if (e) return e; break; }
+			case OP_MIN:          { int e = extrema(my_stack, 'm');            if (e) return e; break; }
+			case OP_MAX:          { int e = extrema(my_stack, 'M');            if (e) return e; break; }
+			case OP_SWITCH:       { int e = op_switch(my_stack);               if (e) return e; break; }
+			case OP_OVER:         { int e = over(my_stack);                    if (e) return e; break; }
+			case OP_DROP:         { int e = drop(my_stack);                    if (e) return e; break; }
+			case OP_RAVEL:        { int e = ravel(my_stack);                   if (e) return e; break; }
+			case OP_SHAPE:        { int e = op_shape(my_stack);                if (e) return e; break; }
+			case OP_FILL:         { int e = fill(my_stack);                    if (e) return e; break; }
+			case OP_SAVE_DISK:    { int e = on_disk_save(my_stack);            if (e) return e; break; }
+			case OP_LOAD_DISK:    { int e = on_disk_read(my_stack);            if (e) return e; break; }
+			case OP_CONV:         { int e = convoluzione(my_stack);            if (e) return e; break; }
 
 			default:
-				fprintf(stderr, "errore comando sconosciuto: '%c'\n", s[i]);
-				return -1;
+				fprintf(stderr, "error: unknown command '%c'\n", s[i]);
+				return TF_ERR_SYNTAX;
 		}
 		sep_state = 1;
 	}
 
-	return 0;
+	return TF_OK;
 }

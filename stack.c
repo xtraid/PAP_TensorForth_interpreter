@@ -43,7 +43,7 @@ int stack_resize(stack *s){
 
 /* Allocates and initializes a new array_instance with ref_count 1.
   * Returns NULL on allocation failure. */
-array_instance *new_instance(float *data, coppia shape) {
+array_instance *new_instance(float *data, shape_t shape) {
     array_instance *instance = malloc(sizeof(array_instance));
     if (instance == NULL) {
         perror("malloc");
@@ -59,7 +59,7 @@ array_instance *new_instance(float *data, coppia shape) {
 
   /* Pushes a new tensor onto the stack. Resizes if at capacity.
    * Returns 0 on success, -1 on allocation failure. */
-int stack_push(stack *s, float *arr, coppia forma) {
+int stack_push(stack *s, float *arr, shape_t forma) {
     array_instance *instance = new_instance(arr, forma);
     if (instance == NULL)
         return -1;
@@ -98,7 +98,7 @@ array_instance *stack_pop(stack *s){
 		}
     stack_item item = s->stack[--s->top];
     if (item.type == ITEM_STRING) {
-        fprintf(stderr, "errore: atteso tensore, trovato stringa \"%s\"\n", item.filename);
+        fprintf(stderr, "error: expected tensor, found string \"%s\"\n", item.filename);
         free(item.filename);
         if (s->top < s->capacity / 4) stack_resize(s);
         return NULL;
@@ -116,7 +116,7 @@ array_instance *stack_peek(stack *s) {
     if (s->top == 0) { fprintf(stderr, "stack underflow\n"); return NULL; }
     stack_item *top = &s->stack[s->top - 1];
     if (top->type != ITEM_TENSOR) {
-        fprintf(stderr, "errore: atteso tensore, trovato stringa\n");
+        fprintf(stderr, "error: expected tensor, found string\n");
         return NULL;
     }
     return top->tensor;

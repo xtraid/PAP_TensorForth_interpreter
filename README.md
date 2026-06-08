@@ -23,7 +23,7 @@ This produces a `tensorforth` executable.
 
 ```sh
 ./tensorforth <script.tensorforth>
-./run_tests.sh            # run the test suite (65 tests)
+./run_tests.sh            # run the test suite (82 tests)
 ./run_tests.sh --valgrind # run with valgrind leak check
 ```
 
@@ -215,6 +215,17 @@ The stack doubles capacity when full and halves when usage drops below 25% of ca
 ### Layout
 
 All tensors use row-major (C-order) layout. Element `[i, j]` of a tensor with `N` columns is at `data[i * N + j]`.
+
+### Error reporting
+
+All errors are printed to `stderr` in English. Each error message is emitted by the function that first detects the problem (which has the relevant context — shapes, values, filenames). `main` then prints a qualitative category line:
+
+```
+error: shape mismatch [1 2] != [1 3]
+abort: shape mismatch
+```
+
+Error categories (returned as `TFError` codes from all ops): `stack error`, `shape mismatch`, `type error`, `invalid argument`, `I/O error`, `memory error`, `syntax error`. Exit code is always `1` on any failure.
 
 ### Array literal parsing
 

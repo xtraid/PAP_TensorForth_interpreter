@@ -154,37 +154,37 @@ echo "=== TEST ERRORI SINTASSI ARRAY ===================================="
 run_test "manca spazio dopo [" \
     fail \
     "[1.0 2.0 ]" \
-    "manca lo spazio obbligatorio dopo"
+    "missing space after"
 
 run_test "manca spazio prima di ]" \
     fail \
     "[ 1.0 2.0]" \
-    "manca lo spazio obbligatorio prima"
+    "missing space before"
 
 run_test "spazio doppio tra elementi" \
     fail \
     "[ 1.0  2.0 ]" \
-    "spazio doppio"
+    "double space"
 
 run_test "token non valido (lettera)" \
     fail \
     "[ 1.0 abc ]" \
-    "token non valido"
+    "invalid"
 
 run_test "manca chiusura ]" \
     fail \
     "[ 1.0 2.0 " \
-    "manca la chiusura"
+    "missing closing"
 
 run_test "token non valido subito dopo [" \
     fail \
     "[ abc ]" \
-    "token non valido"
+    "invalid"
 
 run_test "token non valido in mezzo" \
     fail \
     "[ 1.0 2.0 @ 3.0 ]" \
-    "token non valido"
+    "invalid"
 
 echo ""
 echo "=== TEST ERRORI OPERAZIONI ========================================"
@@ -202,12 +202,12 @@ run_test "matmul con vettore (entrambi vettori)" \
 run_test "matmul shape incompatibili (3 cols vs 2 rows)" \
     fail \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r @" \
-    "incompatibili"
+    "mismatch"
 
 run_test "reshape prodotto incompatibile" \
     fail \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 3.0 ] r" \
-    "incompatibile"
+    "incompatible"
 
 run_test "reshape shape con piu di 2 elementi" \
     fail \
@@ -217,17 +217,17 @@ run_test "reshape shape con piu di 2 elementi" \
 run_test "not su array non booleano" \
     fail \
     "[ 0.5 1.0 0.0 ] !" \
-    "booleano"
+    "boolean"
 
 run_test "and su array non booleano" \
     fail \
     "[ 0.5 1.0 ] [ 1.0 0.0 ] &" \
-    "operazione logica"
+    "non-boolean"
 
 run_test "mask su maschera non booleana" \
     fail \
     "[ 0.0 0.0 ] [ 1.0 2.0 ] [ 0.5 0.5 ] \$" \
-    "booleana"
+    "boolean"
 
 run_test "stack underflow su print" \
     fail \
@@ -242,7 +242,7 @@ run_test "stack underflow su operazione binaria" \
 run_test "shape incompatibili su addizione" \
     fail \
     "[ 1.0 2.0 ] [ 1.0 2.0 3.0 ] +" \
-    "incompatibili"
+    "mismatch"
 
 run_test "dot product su matrici 2D" \
     fail \
@@ -252,7 +252,7 @@ run_test "dot product su matrici 2D" \
 run_test "dot product lunghezze diverse" \
     fail \
     "[ 1.0 2.0 3.0 ] [ 1.0 2.0 ] ." \
-    "incompatibili"
+    "mismatch"
 
 echo ""
 echo "=== TEST SWAP / OVER / DROP ======================================="
@@ -399,12 +399,12 @@ run_test "conv kernel 1D" \
 run_test "conv kernel non quadrato" \
     fail \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 5.0 6.0 ] [ 2.0 3.0 ] r c" \
-    "quadrata"
+    "square"
 
 run_test "conv kernel ordine pari" \
     fail \
     "[ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r [ 1.0 2.0 3.0 4.0 ] [ 2.0 2.0 ] r c" \
-    "dispari"
+    "odd"
 
 echo ""
 echo "=== TEST PGM I/O ================================================="
@@ -434,7 +434,7 @@ echo "=== TEST ROBUSTEZZA (input invalidi) ============================="
 run_test "array vuoto [ ]" \
     fail \
     "[ ]" \
-    "array vuoto"
+    "empty array"
 
 run_test "random dimensione negativa" \
     fail \
@@ -459,12 +459,12 @@ run_test "reshape dimensione zero" \
 run_test "reshape overflow dimensioni" \
     fail \
     "[ 1.0 2.0 ] [ 100000.0 100000.0 ] r" \
-    "troppo grande"
+    "too large"
 
 run_test "random overflow dimensioni" \
     fail \
     "[ 100000.0 100000.0 ] ?" \
-    "troppo grande"
+    "too large"
 
 echo ""
 echo "=== STRESS TEST =================================================="
