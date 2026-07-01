@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Build
+        run: make
+
+      - name: Unit tests (82 cases)
+        run: |
+          chmod +x run_tests.sh
+          ./run_tests.sh
+
+      - name: Black-box tests + valgrind (spec-derived, 143 checks)
+        run: |
+          chmod +x hard_test.sh
+          ./hard_test.sh
