@@ -1,6 +1,6 @@
 # TensorForth Interpreter
 
-[![CI](https://github.com/xtraid/PAP_TensorFort_interpreter/actions/workflows/ci.yml/badge.svg)](https://github.com/xtraid/PAP_TensorFort_interpreter/actions/workflows/ci.yml)
+[![CI](https://github.com/xtraid/PAP_TensorForth_interpreter/actions/workflows/ci.yml/badge.svg)](https://github.com/xtraid/PAP_TensorForth_interpreter/actions/workflows/ci.yml)
 
 A stack-based interpreter for tensor computation, written in C17. TensorForth is a Forth-inspired language specialized for linear algebra operations on 2D tensors (matrices).
 
