@@ -1,0 +1,45 @@
+2026-09-27T21:36:40+00:00
+Linux 7.2.5-3-omarchy x86_64 GNU/Linux
+CPU(s):                                  12
+Model name:                              12th Gen Intel(R) Core(TM) i7-1255U
+gcc (GCC) 16.2.1 20260810
+6ed061f0e3eae19aab4213914a6314406cdb73a8
+2e2998eddbca7111fa8bfbf5ccccc7481e4f398f790e0aa592687cb565c0c4ff  matmul_bench.c
+17111e4abbf5475b4d0884d7be747e19f57fd292c7e781fced11f357fe6e84c1  Makefile
+fad56f0792bd6186a3c3133977291289eef7f2c66afaacdf7443e634ac543b90  run.sh
+bcfc71772a6b0135e62fffa3eae3410f6e858ee6a1913d60b904e6c95a13203c  ../main.c
+7bdc5f1f20bb6dac7ffde65114c29a25251fcb1d1bf4ae11730ede64ff2c9fe4  ../ops_conv.c
+06152d9800b1f6c504b438614b60ef0c1c7f17045cef95e10fc946e5c91e7c5d  ../ops_io.c
+bf0e3abe64540ea2f5c9e87b1ce058525609cd3f897966a42d0067ba5f4a33d2  ../ops_linalg.c
+7b1bbe4f78e1243b50ac08853fdbe100457c7cc0431810af4d80273fed862335  ../ops_math.c
+d52af94fdfc55acc2ac53fb4b58cdc11f12735416b5f88f5edfec664c42b0e15  ../ops_stack.c
+5b697799cbf908381b7682b2c840f52192d33bf95a57c1b675ae9ababd1df760  ../parser.c
+a155ef25f7dab63338819a913044d9d49f3f734c82f2aeb2662997d6be6e9dd8  ../reader.c
+fdc50a90a0b27ebbe13072cddd84af5ba58e1cca99779f42b65f9c46cc861d16  ../stack.c
+3886728f10fae89e3f854a5c8262bcc1a1b9a164d62aad8c6bf0615c1a2794cd  ../parser.h
+13face559c71f4a423f16953227d4e745b632ce7b80e2f329be1d08cf906bc02  ../reader.h
+da95914d3f1066a115c20f7c9de29916d16aab9b0b5600f7269dce0267d23bbc  ../stack.h
+d1494afbd26e323b8f0cb80e663c7e8f5d3ed0b07715a9198bb27ccc159abfa1  build/matmul_bench
+	linux-vdso.so.1 (0x00007c7dbf827000)
+	libopenblas.so.0 => /home/manuel/Work/PAP_tensorforth/benchmarks/.deps/openblas/usr/lib/libopenblas.so.0 (0x00007c7dbd918000)
+	libm.so.6 => /usr/lib/libm.so.6 (0x00007c7dbd7e1000)
+	libgomp.so.1 => /usr/lib/libgomp.so.1 (0x00007c7dbd787000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007c7dbd400000)
+	libgfortran.so.5 => /usr/lib/libgfortran.so.5 (0x00007c7dbd000000)
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007c7dbf82a000)
+	libgcc_s.so.1 => /usr/lib/libgcc_s.so.1 (0x00007c7dbd75a000)
+OMP_DYNAMIC=FALSE OMP_PROC_BIND=FALSE OMP_WAIT_POLICY=PASSIVE
+command: benchmarks/build/matmul_bench 5000 5 12
+N,5000,repeats,5,warmups,1,requested_threads,12,seed,123456789
+OpenBLAS,OpenBLAS 0.3.34 DYNAMIC_ARCH NO_AFFINITY USE_OPENMP Haswell MAX_THREADS=64,core,Haswell,threads,12
+OpenMP_team,12
+phase,round,TensorForth_s,OpenBLAS_s,max_relative_error
+warmup,0,6.724162087,2.243140758,8.80978097e-07
+sample,1,6.864863202,2.116225870,8.80978097e-07
+sample,2,6.850892921,2.347744435,8.80978097e-07
+sample,3,6.376674000,2.088275829,8.80978097e-07
+sample,4,7.319124465,3.346330381,8.80978097e-07
+sample,5,6.171163908,2.286164988,8.80978097e-07
+summary,TensorForth,median_s,6.850892921,GFLOPS,36.491594,min_s,6.171163908,max_s,7.319124465
+summary,OpenBLAS,median_s,2.286164988,GFLOPS,109.353437,min_s,2.088275829,max_s,3.346330381
+validation,PASS,full_output_each_round,reference_samples,16,max_relative_error,8.80978097e-07

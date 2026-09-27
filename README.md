@@ -192,6 +192,37 @@ Step-by-step:
 
 ---
 
+## Matrix multiplication benchmark
+
+![TensorForth @ operator vs OpenBLAS SGEMM](docs/matmul-benchmark.png)
+
+A small operation-level benchmark compares TensorForth's `@` operator with
+OpenBLAS `SGEMM` on two `5000×5000` `float32` matrices.
+
+Inputs are prepared before timing. The TensorForth measurement covers the
+public `@` operation, including result allocation and the internal operand
+transpose. OpenBLAS receives preallocated `A`, `B`, and `C` buffers, so this
+should not be read as a comparison between equivalent isolated mathematical
+kernels.
+
+On an Intel Core i7-1255U using 12 threads, the median of five measured runs
+after one excluded warm-up round was:
+
+| Operation | Median | GFLOP/s |
+| --- | ---: | ---: |
+| TensorForth `@` | 6.851 s | 36.49 |
+| OpenBLAS `SGEMM` | 2.286 s | 109.35 |
+
+Every round validates the complete TensorForth output against OpenBLAS and
+independently checks 16 output elements using double-precision accumulation.
+The maximum relative difference between the two outputs observed in this run
+was `8.81e-7`.
+
+The benchmark source, runner, build configuration, methodology, and raw result
+log are in [`benchmarks/`](benchmarks/). These measurements characterize the
+runtime's exposed operation on this machine; they are not an isolated-kernel
+comparison.
+
 ## Implementation Notes
 
 ### Memory management
